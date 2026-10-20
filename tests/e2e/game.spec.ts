@@ -1,3 +1,4 @@
+import { openNpc, openExpedition } from "./helpers";
 import { test, expect, type Page } from "@playwright/test";
 type Snapshot = {
   pos: { x: number; y: number };
@@ -27,12 +28,12 @@ test("carrega arte, navega pelo Farol, combate, recompensa e próxima câmara", 
   await page.getByRole("button", { name: /Entrar no Farol/ }).click();
   await expect(page.getByText("Farol dos Ecos", { exact: true })).toBeVisible();
   await page.screenshot({ path: "test-results/farol.png" });
-  await page.getByRole("button", { name: /Oficina de Orren/ }).click();
+  await openNpc(page, "orren");
   await expect(
     page.getByRole("heading", { name: "Metal que ainda se lembra" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "×" }).click();
-  await page.getByRole("button", { name: /Iniciar expedição/ }).click();
+  await openExpedition(page);
   await page.locator("#seed-input").fill("E2E-AURORA");
   await page.getByRole("button", { name: "Atravessar o portal →" }).click();
   await expect.poll(async () => (await snap(page)).room).toBe(0);
@@ -233,7 +234,7 @@ test("morte preserva Ecos e ressurreição permite outra expedição", async ({
   await page.getByRole("button", { name: "Ressurgir no Farol →" }).click();
   await expect(page.getByText("Farol dos Ecos", { exact: true })).toBeVisible();
   expect((await snap(page)).hp).toBe(120);
-  await page.getByRole("button", { name: /Iniciar expedição/ }).click();
+  await openExpedition(page);
   await page.getByRole("button", { name: "Atravessar o portal →" }).click();
   await expect.poll(async () => (await snap(page)).room).toBe(0);
   expect(errors).toEqual([]);

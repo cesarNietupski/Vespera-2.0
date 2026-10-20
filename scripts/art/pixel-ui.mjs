@@ -266,6 +266,79 @@ export function icon(name) {
     c.line(2, 6, 5, 8, m);
     c.line(1, 10, 4, 10, m);
     c.line(2, 14, 5, 12, m);
+  } else if (name === "food") {
+    c.ellipse(10, 11, 8, 5, "#be8b4b", INK);
+    c.ellipse(10, 9, 8, 5, "#e5b96e", INK);
+    for (const x of [6, 10, 14]) c.line(x, 6, x - 2, 10, "#99633b", 2);
+    c.line(5, 13, 15, 13, "#f3d49a");
+  } else if (name === "water") {
+    c.poly(
+      [
+        [10, 1],
+        [17, 11],
+        [17, 15],
+        [13, 18],
+        [7, 18],
+        [3, 14],
+        [4, 10],
+      ],
+      "#609fb3",
+      INK,
+    );
+    c.line(8, 7, 6, 12, "#c4e8de", 2);
+    c.line(8, 16, 13, 16, "#94cbc8");
+  } else if (name === "leaf") {
+    c.poly(
+      [
+        [3, 16],
+        [3, 9],
+        [8, 3],
+        [17, 2],
+        [16, 12],
+        [10, 17],
+      ],
+      "#71996b",
+      INK,
+    );
+    c.line(3, 18, 14, 5, "#c7d59a", 2);
+    c.line(9, 10, 8, 6, "#a6bc83");
+  } else if (name === "thread") {
+    c.ellipse(10, 5, 6, 3, g, INK);
+    c.rect(6, 5, 8, 10, "#b17a87");
+    for (let j = 0; j < 4; j++) c.line(6, 7 + j * 2, 14, 8 + j * 2, "#ecd0ad");
+    c.ellipse(10, 16, 6, 2, g, INK);
+  } else if (name === "coat") {
+    c.poly(
+      [
+        [6, 3],
+        [9, 5],
+        [12, 3],
+        [17, 8],
+        [15, 12],
+        [13, 10],
+        [14, 18],
+        [5, 18],
+        [6, 10],
+        [3, 12],
+        [1, 8],
+      ],
+      "#806a87",
+      INK,
+    );
+    c.line(9, 6, 9, 17, "#d9bca1", 2);
+    c.line(5, 16, 14, 16, "#ac8b91");
+  } else if (name === "pot") {
+    c.ellipse(10, 13, 7, 5, "#536067", INK);
+    c.ellipse(10, 9, 8, 4, g, INK);
+    c.ellipse(10, 9, 6, 2, "#c08d56");
+    c.line(7, 5, 6, 1, "#d5d9b3");
+    c.line(12, 5, 13, 2, "#c1caa6");
+  } else if (name === "cup") {
+    c.rect(4, 8, 10, 9, "#9f7550");
+    c.ellipse(9, 8, 5, 2, "#dbba81", INK);
+    c.ring(15, 11, 3, 4, g);
+    c.line(6, 4, 7, 1, "#c2d2b0");
+    c.line(11, 5, 12, 2, "#d9dfbc");
   } else if (name === "skull") {
     c.ellipse(10, 8, 6, 6, s, INK);
     c.rect(6, 9, 8, 7, s);

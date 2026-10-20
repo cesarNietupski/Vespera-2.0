@@ -105,7 +105,13 @@ export function heroFrame(state, f, count, dir, weapon = "blade", npc = "") {
       ? ["#242939", "#354a61", "#526f80", "#83a6a5", "#bdd3bb"]
       : npc === "orren"
         ? ["#2d2632", "#5a3c3d", "#966147", "#c39760", "#e4c18a"]
-        : CLOTH;
+        : [...CLOTH];
+  if (npc === "lume")
+    cloth.splice(0, 5, "#332a29", "#5a3d32", "#96714c", "#d3b17d", "#f0d9aa");
+  if (npc === "caio")
+    cloth.splice(0, 5, "#192f3a", "#2d535e", "#48838b", "#87bab4", "#c1dbcb");
+  if (npc === "iria")
+    cloth.splice(0, 5, "#30283b", "#59415e", "#8b627f", "#c59b9c", "#ead0b5");
   const armor = npc === "salvia" ? GOLD : STEEL;
   const stride = moving
       ? Math.sin(cycle) * (running ? 5 : 3)
@@ -281,6 +287,29 @@ export function heroFrame(state, f, count, dir, weapon = "blade", npc = "") {
   } else if (state === "dash") {
     offset = -1.3;
     hand = [-1, -20];
+  } else if (npc === "lume") {
+    poly(
+      [
+        [-4, -27],
+        [5, -27],
+        [7, -9],
+        [-6, -9],
+      ],
+      "#d1bf96",
+    );
+    line([7, -25], [13, -11], GOLD[2], 2);
+    ell(13, -11, 3, 2, "#684733", INK);
+  } else if (npc === "caio") {
+    ell(10, -18, 4, 6, "#3c8892", INK);
+    ell(9, -20, 2, 3, "#9bd6ce");
+    line([8, -25], [11, -25], GOLD[2], 2);
+    line([-5, -27], [5, -13], "#a4bdab", 1);
+  } else if (npc === "iria") {
+    ell(10, -18, 4, 5, "#a27278", GOLD[1]);
+    for (let j = 0; j < 4; j++)
+      line([7, -22 + j * 2], [13, -20 + j * 2], "#dfbc9d");
+    line([5, -29], [13, -26], STEEL[4]);
+    line([5, -25], [13, -29], STEEL[3]);
   } else if (state === "interact") {
     hand = [7 + Math.sin(cycle) * 2, -29 - Math.sin(cycle) * 3];
     offset = -0.6;
@@ -487,6 +516,24 @@ export function heroFrame(state, f, count, dir, weapon = "blade", npc = "") {
     line([-3, -35], [4, -35], cloth[0], 2);
     line([-3, -34], [4, -34], GOLD[3]);
   } else c.gem(...P(0, -25), 2, AURORA[3]);
+  if (npc === "lume") {
+    ell(0, -40.5, 6, 2, "#f1dec0", INK);
+    line([-5, -39], [5, -39], "#b6a27b", 2);
+  } else if (npc === "caio") {
+    poly(
+      [
+        [-5, -38],
+        [-4, -41],
+        [3, -41],
+        [6, -38],
+      ],
+      "#3d6875",
+    );
+    line([-5, -38], [6, -38], "#a3c9bf");
+  } else if (npc === "iria") {
+    line([-4, -38], [5, -38], "#c899a3", 2);
+    c.pixel(...P(4, -39), "#f2dfb7");
+  }
   if (state === "interact")
     for (let i = 0; i < 4; i++) {
       const a = cycle + (i * Math.PI) / 2;

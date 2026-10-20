@@ -1,3 +1,4 @@
+import { openNpc } from "./helpers";
 import { test, expect } from "@playwright/test";
 test("identidade medieval, fonte legível e seis ataques encadeados com M1 em cada arma", async ({
   page,
@@ -63,7 +64,7 @@ test("interface em pergaminho mantém objetivos e diálogos legíveis", async ({
   await page.goto("/?test=1");
   await page.locator('[data-action="hub"]').waitFor();
   await page.locator('[data-action="hub"]').click();
-  await page.locator('[data-action="armory"]').click();
+  await openNpc(page, "orren");
   await expect(
     page.getByRole("heading", { name: "Metal que ainda se lembra" }),
   ).toBeVisible();

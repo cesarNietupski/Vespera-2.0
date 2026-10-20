@@ -353,6 +353,66 @@
       ]
     },
     {
+      "name": "lume",
+      "category": "atlas",
+      "image": "lume.png",
+      "metadata": "lume.json",
+      "width": 1792,
+      "height": 1344,
+      "frames": 192,
+      "nativeFrame": 56,
+      "source": "sources/lume.pixel.json",
+      "editableSource": "sources/lume.native.png",
+      "format": "RGBA8888",
+      "style": "32-bit era pixel art",
+      "method": "Native software pixel art → nearest 2× → truecolour RGBA PNG",
+      "animations": [
+        "idle",
+        "move",
+        "interact"
+      ]
+    },
+    {
+      "name": "caio",
+      "category": "atlas",
+      "image": "caio.png",
+      "metadata": "caio.json",
+      "width": 1792,
+      "height": 1344,
+      "frames": 192,
+      "nativeFrame": 56,
+      "source": "sources/caio.pixel.json",
+      "editableSource": "sources/caio.native.png",
+      "format": "RGBA8888",
+      "style": "32-bit era pixel art",
+      "method": "Native software pixel art → nearest 2× → truecolour RGBA PNG",
+      "animations": [
+        "idle",
+        "move",
+        "interact"
+      ]
+    },
+    {
+      "name": "iria",
+      "category": "atlas",
+      "image": "iria.png",
+      "metadata": "iria.json",
+      "width": 1792,
+      "height": 1344,
+      "frames": 192,
+      "nativeFrame": 56,
+      "source": "sources/iria.pixel.json",
+      "editableSource": "sources/iria.native.png",
+      "format": "RGBA8888",
+      "style": "32-bit era pixel art",
+      "method": "Native software pixel art → nearest 2× → truecolour RGBA PNG",
+      "animations": [
+        "idle",
+        "move",
+        "interact"
+      ]
+    },
+    {
       "name": "boss0",
       "category": "atlas",
       "image": "boss0.png",
@@ -543,7 +603,7 @@
       "metadata": "props.json",
       "width": 2304,
       "height": 1728,
-      "frames": 98,
+      "frames": 101,
       "nativeFrame": 96,
       "source": "sources/props.pixel.json",
       "editableSource": "sources/props.native.png",
@@ -564,7 +624,10 @@
         "gear",
         "forge",
         "shelf",
-        "astrolabe"
+        "astrolabe",
+        "cookpot",
+        "cistern",
+        "loom"
       ]
     },
     {
@@ -821,6 +884,83 @@
       "method": "Original native pixel art, nearest-neighbour upscale"
     },
     {
+      "name": "icon-food",
+      "category": "ui",
+      "image": "icon-food.png",
+      "source": "sources/icon-food.native.png",
+      "width": 40,
+      "height": 40,
+      "format": "RGBA8888",
+      "style": "32-bit era pixel art",
+      "method": "Original native pixel art, nearest-neighbour upscale"
+    },
+    {
+      "name": "icon-water",
+      "category": "ui",
+      "image": "icon-water.png",
+      "source": "sources/icon-water.native.png",
+      "width": 40,
+      "height": 40,
+      "format": "RGBA8888",
+      "style": "32-bit era pixel art",
+      "method": "Original native pixel art, nearest-neighbour upscale"
+    },
+    {
+      "name": "icon-leaf",
+      "category": "ui",
+      "image": "icon-leaf.png",
+      "source": "sources/icon-leaf.native.png",
+      "width": 40,
+      "height": 40,
+      "format": "RGBA8888",
+      "style": "32-bit era pixel art",
+      "method": "Original native pixel art, nearest-neighbour upscale"
+    },
+    {
+      "name": "icon-thread",
+      "category": "ui",
+      "image": "icon-thread.png",
+      "source": "sources/icon-thread.native.png",
+      "width": 40,
+      "height": 40,
+      "format": "RGBA8888",
+      "style": "32-bit era pixel art",
+      "method": "Original native pixel art, nearest-neighbour upscale"
+    },
+    {
+      "name": "icon-coat",
+      "category": "ui",
+      "image": "icon-coat.png",
+      "source": "sources/icon-coat.native.png",
+      "width": 40,
+      "height": 40,
+      "format": "RGBA8888",
+      "style": "32-bit era pixel art",
+      "method": "Original native pixel art, nearest-neighbour upscale"
+    },
+    {
+      "name": "icon-pot",
+      "category": "ui",
+      "image": "icon-pot.png",
+      "source": "sources/icon-pot.native.png",
+      "width": 40,
+      "height": 40,
+      "format": "RGBA8888",
+      "style": "32-bit era pixel art",
+      "method": "Original native pixel art, nearest-neighbour upscale"
+    },
+    {
+      "name": "icon-cup",
+      "category": "ui",
+      "image": "icon-cup.png",
+      "source": "sources/icon-cup.native.png",
+      "width": 40,
+      "height": 40,
+      "format": "RGBA8888",
+      "style": "32-bit era pixel art",
+      "method": "Original native pixel art, nearest-neighbour upscale"
+    },
+    {
       "name": "logo",
       "category": "ui",
       "image": "logo.png",
@@ -869,6 +1009,39 @@
       "category": "ui",
       "image": "portrait-nim.png",
       "source": "sources/nim.native.png",
+      "width": 96,
+      "height": 124,
+      "format": "RGBA8888",
+      "style": "32-bit era pixel art",
+      "method": "Native original character portrait"
+    },
+    {
+      "name": "portrait-lume",
+      "category": "ui",
+      "image": "portrait-lume.png",
+      "source": "sources/lume.native.png",
+      "width": 96,
+      "height": 124,
+      "format": "RGBA8888",
+      "style": "32-bit era pixel art",
+      "method": "Native original character portrait"
+    },
+    {
+      "name": "portrait-caio",
+      "category": "ui",
+      "image": "portrait-caio.png",
+      "source": "sources/caio.native.png",
+      "width": 96,
+      "height": 124,
+      "format": "RGBA8888",
+      "style": "32-bit era pixel art",
+      "method": "Native original character portrait"
+    },
+    {
+      "name": "portrait-iria",
+      "category": "ui",
+      "image": "portrait-iria.png",
+      "source": "sources/iria.native.png",
       "width": 96,
       "height": 124,
       "format": "RGBA8888",

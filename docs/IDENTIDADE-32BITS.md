@@ -43,7 +43,7 @@ npm run test:e2e
 
 Fontes: `scripts/art/pixel-raster.mjs`, `pixel-actors.mjs`, `pixel-world.mjs`, `pixel-ui.mjs`. Atlas nativos editáveis: `public/assets/sources/*.native.png`. Metadados: `*.pixel.json`, manifesto e atlas JSON.
 
-A checagem de bordas percorre todos os quadros dos três equipamentos, oito inimigos e quatro chefes. A suíte também verifica RGBA de 32 bits, ampliação exata 2×, poses diferentes para os seis ataques, duração das ações e o encadeamento real com mouse no navegador.
+A checagem de bordas percorre todos os quadros dos três equipamentos, seis NPCs, oito inimigos e quatro chefes. A suíte também verifica RGBA de 32 bits, ampliação exata 2×, poses diferentes para os seis ataques, duração das ações e o encadeamento real com mouse no navegador. Lume, Caio e Íria têm atlas e retratos próprios, acompanhados de cozinha, cisterna e tear no Farol.
 
 O estilo segue sendo arte procedural autoral. Não se apresenta como uma coleção de sprites pintados individualmente por um artista, nem como acabamento AAA. A renovação visual mantém o save anterior e os sistemas existentes da campanha.
 

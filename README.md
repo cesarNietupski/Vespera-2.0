@@ -30,7 +30,7 @@ O projeto usa caminhos relativos no build e pode ser hospedado como site estáti
 
 ## Jogar
 
-Entre no Farol. Sálvia, Orren e Nim conversam quando Eira se aproxima e pressiona E. A oficina, o altar e a galeria também estão acessíveis no painel à direita. Inicie uma expedição pelo painel ou pelo portal.
+Entre no Farol, aproxime-se de um morador e pressione E. **Sálvia** desenvolve habilidades, **Orren** cuida das armas e **Nim** mostra memórias. **Lume** prepara comida, **Caio** purifica água e faz chá, e **Íria** confecciona vestimentas. Os serviços exigem conversa e proximidade; não há painel de atalhos para crafting ou árvore. Inicie uma expedição pressionando E junto ao portal.
 
 | Entrada | Ação |
 | --- | --- |
@@ -43,17 +43,25 @@ Entre no Farol. Sálvia, Orren e Nim conversam quando Eira se aproxima e pressio
 | Shift | Ruptura: dano e lentidão ao redor |
 | Q | Aurora: ataque amplo com energia completa |
 | E | Interagir / manter pressionado para canalizar |
+| R | Comer uma ração; usa ensopado se não houver ração |
+| T | Beber água; usa chá se não houver água |
+| I | Inventário: consumir provisões, vestir roupas e consultar recursos |
 | Tab | Mapa da região |
 | Esc | Pausa e retorno |
 | F1 | Controles |
 
 Elimine os inimigos **e** cumpra o objetivo para abrir a saída. Áreas alaranjadas e linhas antecipam os ataques. Urnas dão óbolos; flores explodem e ferem inimigos; espelhos devolvem projéteis hostis. Os portais só avançam ao pressionar E nas proximidades. As rotas opcionais retornam ao caminho principal.
 
+Depois de concluir cada câmara e escolher sua recompensa, use **Voltar ao Farol** para se abastecer sem encerrar a expedição. Vida, óbolos, Juramentos e progresso são preservados. Para retomar, pressione **E** no portal do Farol e escolha **Continuar expedição salva**; a câmara concluída não gera outro saque.
+
+Fome, sede e frio aumentam durante a expedição; quanto menor a barra, melhor. Necessidades altas reduzem dano, velocidade e cadência, e valores máximos causam perda de vida. Leve comida e bebida, vista proteção contra frio e aqueça-se nas tochas ou no Farol. Menus e diálogos pausam as necessidades. Abra o **Inventário** com **I**, pelo HUD ou na pausa: quatro abas permitem consumir comidas e bebidas, consultar todos os recursos e moedas, vestir roupas já confeccionadas e consultar armas e Juramentos. Guia de moradores, receitas e efeitos em [docs/SOBREVIVENCIA-E-MORADORES.md](docs/SOBREVIVENCIA-E-MORADORES.md).
+
 Óbolos e Juramentos duram uma expedição. Ecos, habilidades, materiais, armas, aprimoramentos, infusões, memórias e desfechos ficam no navegador. O Altar oferece uma árvore de 18 habilidades, pré-requisitos e redistribuição gratuita. Na Oficina, forje armas com Ecos e materiais, aprimore até +3 e aplique infusões de Vidro, Brasa ou Maré. Cada câmara restaurada concede materiais e 2 Ecos; o saque sobrevive à morte. Consulte [o guia de progressão e receitas](docs/PROGRESSAO-E-FORJA.md). Combine habilidades e equipamentos com os Juramentos das quatro escolas.
 
 ## Conteúdo integrado
 
-- Farol com três NPCs, árvore de 18 habilidades em três caminhos, pré-requisitos, níveis e restituição dos Ecos investidos, galeria e conquista de campanha.
+- Farol com seis NPCs, serviços por conversa e proximidade, árvore de 18 habilidades, pré-requisitos, níveis, restituição dos Ecos investidos, galeria e conquista de campanha.
+- Fome, sede, frio, variações por bioma, aquecimento, cinco matérias-primas de sobrevivência, quatro provisões e duas vestimentas com isolamento.
 - Crafting com três materiais, receitas de armas, aprimoramentos permanentes até +3, três infusões com efeitos no combate e escolha de arma persistente.
 - Quatro biomas, sete câmaras principais e dois desvios por região: 36 nós, até 28 câmaras na rota principal.
 - Grafo de progressão determinístico, alas de dimensões variáveis, partições BSP, corredores reservados, regras de borda para tiles, A* e validação de entrada, saída, objetivos e encontros com fallback.
@@ -62,7 +70,7 @@ Elimine os inimigos **e** cumpra o objetivo para abrir a saída. Áreas alaranja
 - Oito inimigos com silhuetas e comportamentos diferentes. Perseguição, reposicionamento, recuo, antecipação, ataque, recuperação, stagger e morte.
 - Quatro chefes com sequências de quatro padrões, fases por vida, barras identificadas, ataques sinalizados e recompensas narrativas.
 - 24 Juramentos de Vidro, Cinza, Maré e Eco; loja, eventos com escolhas e dois finais na plataforma do Tear.
-- Pixel art original nativa, atlas PNG/JSON usados pelo Phaser, tilesets por bioma, NPCs exclusivos, retratos, props animados e interface medieval. 51 assets, 8.826 quadros em atlas. Manifesto em `public/assets/manifest.json`.
+- Pixel art original nativa, atlas PNG/JSON usados pelo Phaser, tilesets por bioma, seis NPCs exclusivos, retratos, estações de trabalho, props animados e interface medieval. 64 assets, 9.405 quadros em atlas. Manifesto em `public/assets/manifest.json`.
 - Profundidade por pés, sombras de contato, emissão aditiva, partículas em pool, névoa em camadas, fade de foreground e shader GLSL de vinheta. Renderização WebGL com fallback Canvas.
 - Música procedural original por contexto e efeitos sintetizados por Web Audio. Volumes independentes, qualidade visual e intensidade de câmera.
 - Salvamento LocalStorage versão 2 com validação e recuperação de dados inválidos. Continue reabre a câmara atual; câmaras não concluídas reiniciam seus encontros. O armazenamento é local a este navegador/origem.
@@ -89,7 +97,7 @@ Esta é uma implementação independente de escopo compacto. **Não é equivalen
 
 `tests/systems.test.ts` valida 100 seeds (3.600 câmaras), determinismo, grafo, portas, caminhos A*, áreas de objetivos, projeção, combate, cooldowns, invulnerabilidade, morte, progressão, 24 Juramentos e save corrompido.
 
-Playwright abre o jogo real e verifica menu, assets, Farol, oficina, movimento, combate, recompensa, próxima câmara, pausa, mapa, configurações e continuação. Os testes usam encontros controlados para verificar combate e os seis golpes de cada arma com cliques reais. O modo de QA só é instalado com `?test=1`; não é acessível em sessões normais. Screenshots ficam em `test-results/`. Os testes de assets conferem RGBA de 32 bits, ampliação nearest, poses distintas e as 15 ações nas oito direções de cada equipamento. A suíte de sistemas, progressão, animação, apresentação e assets contém 189 testes. A suíte E2E contém onze cenários por navegador, executados em Chromium e Microsoft Edge, incluindo fonte, proporções, oclusão, pré-requisitos da árvore, redistribuição, receitas, infusões no combate e permanência do saque. Sem Edge instalado, use `npm run test:e2e -- --project=chromium`. `npm run assets:check` percorre os quadros dos atores para detectar recortes nas bordas.
+Playwright abre o jogo real e verifica menu, assets, Farol, oficina, movimento, combate, recompensa, próxima câmara, pausa, mapa, configurações e continuação. Os testes usam encontros controlados para verificar combate e os seis golpes de cada arma com cliques reais. O modo de QA só é instalado com `?test=1`; não é acessível em sessões normais. Screenshots ficam em `test-results/`. Os testes de assets conferem RGBA de 32 bits, ampliação nearest, poses distintas e as 15 ações nas oito direções de cada equipamento. A suíte de sistemas, progressão, animação, apresentação e assets contém 221 testes. A suíte E2E contém dezenove cenários por navegador, executados em Chromium e Microsoft Edge, incluindo fonte, proporções, oclusão, pré-requisitos da árvore, redistribuição, receitas, infusões no combate, sobrevivência, acesso por NPCs, permanência do saque, retorno entre câmaras e inventário completo. Sem Edge instalado, use `npm run test:e2e -- --project=chromium`. `npm run assets:check` percorre os quadros dos atores para detectar recortes nas bordas.
 
 Consulte [docs/ARQUITETURA.md](docs/ARQUITETURA.md), [docs/PLANO.md](docs/PLANO.md) e [docs/VALIDACAO.md](docs/VALIDACAO.md) para detalhes, andamento e resultados executados.
 

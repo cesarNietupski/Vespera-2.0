@@ -1,0 +1,376 @@
+.hub-hint {
+  position: absolute;
+  right: 25px;
+  bottom: 28px;
+  width: 280px;
+  padding: 13px 17px;
+  background: #26343ae8;
+  border: 2px solid #9a774c;
+  color: #e6d3a7;
+  font-size: 15px;
+  line-height: 1.6;
+  pointer-events: none;
+}
+.hub-hint b {
+  display: block;
+  color: #f8dfaa;
+  margin-bottom: 5px;
+}
+.hub-hint kbd {
+  font-size: 13px;
+}
+.survival-hud {
+  position: absolute;
+  bottom: 155px;
+  left: 24px;
+  width: 390px;
+  pointer-events: auto;
+  background: #3c2b2d;
+  border: 8px solid transparent;
+  border-image: url("/assets/ui-menu.png") 12 fill stretch;
+  padding: 7px 8px;
+}
+.needs-meters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.needs-meter > span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  color: #f6e0b7;
+  line-height: 1.5;
+}
+.needs-meter .px-icon {
+  width: 18px;
+  height: 18px;
+}
+.needs-meter b {
+  font-size: 13px;
+  margin-left: auto;
+}
+.needs-meter > div {
+  height: 5px;
+  background: #211f28;
+  border: 1px solid #b38b58;
+  margin: 6px 0 3px;
+}
+.needs-meter i {
+  display: block;
+  height: 100%;
+  background: #9aaf83;
+  transition: width 0.2s linear;
+}
+.needs-meter.warning i {
+  background: #d6a35d;
+}
+.needs-meter.critical i {
+  background: #dd8b78;
+}
+.needs-meter.critical b {
+  color: #ffb2a0;
+}
+.supply-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.supply-actions > button {
+  padding: 3px 4px;
+  border-width: 5px;
+  font-size: 12px;
+  min-width: 0;
+  flex: 1;
+  line-height: 1.4;
+}
+.npc-service {
+  margin: 25px 0 10px;
+}
+.npc-service > button {
+  width: 100%;
+  font-size: 18px;
+  padding: 13px;
+}
+.survival-recipes {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.survival-recipe {
+  display: flex;
+  flex-direction: column;
+}
+.survival-recipe > strong {
+  font-size: 16px;
+  color: #62442e;
+  margin-bottom: 15px;
+}
+.survival-recipe > button {
+  margin-top: auto;
+  font-size: 16px;
+}
+.survival-recipe .recipe-reason {
+  font-size: 15px;
+  color: #713a2c;
+  margin: 12px 0;
+}
+.survival-recipe > p {
+  font-size: 17px;
+}
+.wardrobe {
+  border-top: 2px solid #a78252;
+  padding-top: 20px;
+}
+.wardrobe h3 {
+  color: #49352c;
+}
+.wardrobe > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+.needs-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 15px 0;
+}
+.needs-summary > span {
+  background: #ead2a4;
+  border: 2px solid #a57e4f;
+  padding: 10px 16px;
+  font-size: 18px;
+  flex: 1;
+  text-align: center;
+}
+.needs-summary b {
+  margin-left: 12px;
+  color: #733d2d;
+}
+.provision-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.provision-list h3 {
+  font-size: 21px;
+}
+.provision-list > article {
+  display: flex;
+  flex-direction: column;
+}
+.provision-list strong {
+  font-size: 16px;
+  margin-bottom: 15px;
+  color: #5c402b;
+}
+.provision-list button {
+  margin-top: auto;
+}
+.survival-tip {
+  font-size: 15px;
+  color: #61432f;
+}
+#ui:has(.modal-backdrop) #announcement {
+  visibility: hidden;
+}
+.room-return {
+  position: absolute;
+  right: 25px;
+  bottom: 105px;
+  width: 285px;
+  padding: 16px;
+  color: #f6e0b7;
+  background: #30282c;
+  border: 8px solid transparent;
+  border-image: url("/assets/ui-menu.png") 12 fill stretch;
+  pointer-events: auto;
+}
+.room-return[hidden] {
+  display: none;
+}
+.room-return p {
+  color: #e1ceaa;
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 10px 0 14px;
+}
+.room-return button {
+  width: 100%;
+  font-size: 16px;
+}
+.resume-expedition {
+  padding: 16px 20px;
+  border: 2px solid #a57e4f;
+  background: #ead2a4;
+  margin-bottom: 24px;
+}
+.resume-expedition p {
+  margin-top: 0;
+}
+.inventory-wallet {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 25px;
+  padding: 12px 16px;
+  background: #ead2a4;
+  border: 2px solid #a57e4f;
+  font-size: 16px;
+  color: #49352c;
+}
+.inventory-wallet > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.inventory-wallet .px-icon {
+  width: 24px;
+  height: 24px;
+}
+.inventory-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 18px 0;
+}
+.inventory-tabs button {
+  font-size: 16px;
+  padding: 9px 5px;
+  line-height: 1.4;
+}
+.inventory-note {
+  font-size: 16px;
+  line-height: 1.5;
+  color: #58402f;
+  margin: 12px 0 18px;
+}
+.inventory-footer {
+  margin-bottom: 0;
+}
+.inventory-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.inventory-item {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: #e6cfa3;
+  border: 2px solid #a78252;
+  padding: 16px;
+  color: #49352c;
+}
+.inventory-item.equipped {
+  background: #efd8a2;
+  border-color: #83542e;
+  box-shadow: inset 0 0 0 2px #ba8e4f;
+}
+.inventory-item h3 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 20px;
+  line-height: 1.35;
+  color: #49352c;
+  margin: 0 0 9px;
+}
+.inventory-item h3 .px-icon {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+}
+.inventory-item .item-count {
+  margin-left: auto;
+  padding: 3px 9px;
+  background: #66432f;
+  color: #fff0d0;
+  border: 1px solid #9c7046;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.inventory-item p {
+  margin: 0 0 14px;
+  color: #58402f;
+  font-size: 17px;
+  line-height: 1.5;
+}
+.inventory-item button {
+  margin-top: auto;
+  font-size: 16px;
+  padding: 7px 10px;
+}
+.inventory-item small,
+.inventory-item strong {
+  font-size: 15px;
+  line-height: 1.5;
+  color: #61432f;
+  margin: 3px 0 10px;
+}
+.inventory-item button + small {
+  margin: 8px 0 0;
+}
+.inventory-section {
+  color: #49352c;
+  font-size: 21px;
+  margin: 24px 0 14px;
+}
+.resource-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.resource-grid h3 {
+  font-size: 18px;
+}
+.resource-grid p {
+  font-size: 16px;
+  margin-bottom: 0;
+}
+@media (max-width: 780px) {
+  .inventory-tabs,
+  .resource-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 520px) {
+  .inventory-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 1100px) {
+  .survival-hud {
+    width: 330px;
+  }
+  .needs-meter > span {
+    font-size: 13px;
+  }
+  .needs-meters {
+    gap: 7px;
+  }
+  .needs-meter .px-icon {
+    display: none;
+  }
+}
+@media (max-width: 780px) {
+  .survival-hud {
+    bottom: 120px;
+    left: 12px;
+    width: 285px;
+    padding: 5px;
+    border-width: 6px;
+  }
+  .supply-actions > button {
+    font-size: 12px;
+  }
+  .hub-hint {
+    width: 210px;
+    right: 12px;
+    font-size: 14px;
+  }
+  .survival-recipes,
+  .provision-list {
+    grid-template-columns: 1fr;
+  }
+  .needs-summary > span {
+    font-size: 16px;
+    padding: 7px;
+  }
+}

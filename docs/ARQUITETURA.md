@@ -27,6 +27,8 @@ O estado de tela suspende simulação, teclado e relógio de eventos nos modais.
 | `game/save.ts` | Validação, versionamento, checkpoint e fechamento de run |
 | `data/skills.ts` | Grafo de 18 habilidades, custos, requisitos, efeitos e restituição |
 | `game/crafting.ts` | Receitas atômicas, níveis de armas, infusões e saque permanente |
+| `game/survival.ts` | Necessidades, clima, isolamento, provisões, receitas e ingredientes |
+| `data/npcs.ts` | Seis moradores, funções, posições e estações de trabalho |
 | `progression.css` | Árvore ramificada, recursos e controles da oficina |
 | `data/boons.ts` | 24 definições de melhorias e agregação de atributos |
 | `data/narrative.ts` | Memórias e diálogos condicionais |
@@ -57,3 +59,11 @@ Humanoides usam escala 0,95 (antes 1,4) e chefes 1,15 (antes 1,65); o cenário m
 Chave: `vespera.save.v2`. Campos validados e números limitados. A extensão de progressão adiciona `skills`, `materials`, `weaponLevels`, `infusions` e `equipped` com migração por valores padrão. Os três talentos anteriores são as raízes da árvore; habilidades desconhecidas ou sem requisitos são removidas na leitura. Níveis de armas são limitados a três, e armas não possuídas não recebem níveis ou infusões. Memórias, chefes, finais, habilidades e equipamento persistente sobrevivem à morte. Fechar run remove apenas seu estado temporário e registra o resultado. Não são guardados identificadores externos ou telemetria.
 
 `World.stats()` agrega habilidades permanentes, arma aprimorada, infusão e Juramentos. Movimento, dano, crítico corpo a corpo e de projéteis, carregado, especial, recargas, armadura, cura e energia consultam essa mesma agregação. Compras validam todos os requisitos antes de alterar os saldos; o controlador só permite alterações no Farol. O saque registra a câmara em `visited` na mesma transação em que concede materiais, impedindo recebimento duplicado ao continuar o save.
+
+Serviços também exigem `activeNpc` e proximidade real do morador. A conversa cria esse contexto; fechar, mudar de câmara ou voltar ao menu o invalida. Cada receita de sobrevivência declara seu responsável, impedindo preparar roupas na cozinha ou comprar habilidades com Orren. O antigo menu lateral foi retirado.
+
+Necessidades ficam em `Run.needs` durante a expedição e em `Save.needs` no Farol. A simulação só chama `tickNeeds` durante jogo ativo. Consequências alteram dano de arma, caminhada e duração dos ataques; extremos geram dano ambiental que preserva a imunidade de combate. Estado, estoque, matérias-primas e guarda-roupa são validados na migração do save v2 e gravados em checkpoints ativos de cinco segundos. Pausa e diálogo não simulam passagem do tempo.
+
+`App.returnToHub()` exige câmara concluída, personagem vivo e recompensa resolvida. Faz checkpoint antes de entrar no Farol, mantendo `Save.run`; não chama `finishRun`. A continuação pelo portal reutiliza `visited` para restaurar a câmara sem inimigos ou novos materiais. O estado transitório `World.rewardPending` evita que o botão de retorno interrompa uma escolha de Juramento pendente. A decisão do último chefe também oferece retorno antes de encerrar a campanha.
+
+`UI.inventory()` reúne provisões, oito materiais, moedas, vestimentas e equipamento em quatro abas, acessíveis no Farol e na expedição. O estado `inventory` pausa a simulação e permite consumir itens e vestir roupas possuídas; as operações persistem sem refazer receitas. `App.wear()` aceita esse contexto para troca de roupas, validando posse e personagem vivo. Criar itens e alterar armas continuam exigindo o NPC correspondente. O atalho I ignora campos de texto, repetição de tecla e combinações de navegador.

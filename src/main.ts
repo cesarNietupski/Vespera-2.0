@@ -2,17 +2,30 @@ import Phaser from "phaser";
 import "./style.css";
 import "./pixel-theme.css";
 import "./progression.css";
-import type { Run, WeaponId, InfusionId } from "./types";
+import "./survival.css";
+import type {
+  Run,
+  WeaponId,
+  InfusionId,
+  ConsumableId,
+  ClothingId,
+} from "./types";
 import { SaveStore, finishRun, newRun } from "./game/save";
 import { AudioDirector } from "./game/audio";
 import { Preload, World } from "./game/world";
 import { UI } from "./ui";
 import { MEMORIES } from "./data/narrative";
-import { project, unproject } from "./game/procedural";
+import { project, unproject, walkable } from "./game/procedural";
 import { BALANCE } from "./game/config";
 import { obscuresActor } from "./game/presentation";
 import { learnSkill, resetSkills, skillStats } from "./data/skills";
 import { craftWeapon, type CraftAction } from "./game/crafting";
+import {
+  craftSurvival,
+  consumeProvision,
+  SURVIVAL_RECIPES,
+  CLOTHING,
+} from "./game/survival";
 
 export class App {
   store = new SaveStore();
@@ -49,6 +62,13 @@ export class App {
     });
     window.addEventListener("pagehide", () => this.saveCheckpoint());
     window.addEventListener("keydown", (e) => {
+      if (
+        e.code === "KeyI" && !e.repeat && !e.ctrlKey && !e.altKey && !e.metaKey &&
+        !(e.target instanceof HTMLElement && e.target.closest("input, textarea, select, [contenteditable]"))
+      ) {
+        e.preventDefault();
+        this.ui.toggleInventory();
+      }
       if (e.key === "Escape") {
         e.preventDefault();
         this.ui.escape();
@@ -77,6 +97,7 @@ export class App {
       BALANCE.hp + (skillStats(this.store.data).hp ?? 0),
     );
     this.run.charge = skillStats(this.store.data).startingCharge ?? 0;
+    this.run.needs = { ...this.store.data.needs };
     this.store.data.run = this.run;
     this.store.write();
     this.ui.screen = "play";
@@ -100,12 +121,24 @@ export class App {
     this.ui.close();
     this.audio.start();
   }
+  returnToHub(): void {
+    if (
+      !this.run || this.world.isHub || !this.world.cleared ||
+      this.world.rewardPending || this.world.health.dead ||
+      !["play", "pause", "victory"].includes(this.ui.screen)
+    ) return;
+    this.saveCheckpoint();
+    this.hub();
+    this.ui.toast("Expedição preservada. Use o portal para continuar.");
+  }
   saveCheckpoint(): void {
     if (this.run && !this.world?.health.dead) {
       this.run.hp = this.world.health.hp;
       this.run.charge = this.world.ultimate;
+      this.store.data.needs = { ...this.run.needs };
       this.store.data.run = this.run;
-    }
+    } else if (!this.run && this.store.data.run)
+      this.store.data.run.needs = { ...this.store.data.needs };
     this.store.write();
   }
   nextRoom(id?: number): void {
@@ -149,8 +182,10 @@ export class App {
     this.ui.victory(choice, run);
   }
   buyTalent(key: string): void {
-    if (!this.world.isHub) {
-      this.ui.toast("Desenvolva suas habilidades no Altar do Farol.");
+    if (!this.ui.hasService("skills")) {
+      this.ui.toast(
+        "Converse com Sálvia no Farol para desenvolver habilidades.",
+      );
       return;
     }
     const reason = learnSkill(this.store.data, key);
@@ -167,7 +202,7 @@ export class App {
     this.audio.play("reward");
   }
   respec(): void {
-    if (!this.world.isHub) return;
+    if (!this.ui.hasService("skills")) return;
     const refund = resetSkills(this.store.data);
     this.world.health.max = this.world.maxHP();
     this.world.health.resurrect();
@@ -180,8 +215,8 @@ export class App {
     action: CraftAction,
     infusion: InfusionId = "none",
   ): void {
-    if (!this.world.isHub) {
-      this.ui.toast("Use a oficina no Farol.");
+    if (!this.ui.hasService("forge")) {
+      this.ui.toast("Converse com Orren no Farol para usar a forja.");
       return;
     }
     const reason = craftWeapon(this.store.data, id, action, infusion);
@@ -201,7 +236,10 @@ export class App {
     );
   }
   unlock(weapon: WeaponId): void {
-    if (!this.world.isHub || !["blade", "hammer", "bow"].includes(weapon))
+    if (
+      !this.ui.hasService("forge") ||
+      !["blade", "hammer", "bow"].includes(weapon)
+    )
       return;
     const s = this.store.data;
     if (!s.unlocked.includes(weapon)) {
@@ -213,6 +251,57 @@ export class App {
     this.store.write();
     this.audio.play("ui");
     this.ui.armory();
+  }
+  craftProvision(id: string): void {
+    const r = SURVIVAL_RECIPES.find((r) => r.id === id);
+    if (!r || !this.ui.hasService(r.service)) {
+      this.ui.toast("Converse com o responsável por esta receita no Farol.");
+      return;
+    }
+    const reason = craftSurvival(this.store.data, id);
+    if (reason) {
+      this.ui.toast(reason);
+      return;
+    }
+    this.store.write();
+    this.ui.survivalCraft();
+    this.audio.play("reward");
+    this.ui.toast(
+      id === "cloak" || id === "coat"
+        ? "Vestimenta confeccionada e equipada."
+        : "Provisão preparada e guardada na mochila.",
+    );
+  }
+  wear(id: ClothingId): void {
+    const inInventory = this.ui.screen === "inventory" && !this.world.health.dead;
+    if (
+      (!inInventory && !this.ui.hasService("clothes")) ||
+      !this.store.data.wardrobe.includes(id) ||
+      !CLOTHING.some((c) => c.id === id)
+    )
+      return;
+    this.store.data.clothing = id;
+    this.store.write();
+    if (inInventory) this.ui.inventory("clothes", true);
+    else this.ui.survivalCraft();
+  }
+  consume(id: ConsumableId): void {
+    if (
+      !["play", "provisions", "inventory"].includes(this.ui.screen) ||
+      this.world.health.dead
+    )
+      return;
+    const reason = consumeProvision(this.store.data, this.world.needs, id);
+    if (reason) {
+      this.ui.toast(reason);
+      return;
+    }
+    this.saveCheckpoint();
+    this.audio.play("reward");
+    if (this.ui.screen === "inventory") this.ui.inventory(this.ui.inventoryTab, true);
+    else if (this.ui.screen === "provisions") this.ui.provisions();
+    else this.ui.updateHUD();
+    this.ui.toast("Provisão consumida.");
   }
 }
 export const app = new App();
@@ -274,6 +363,14 @@ if (new URLSearchParams(location.search).get("test") === "1") {
         playerAnimation: app.world.player?.state,
         playerFrame: app.world.player?.sprite.frame.name,
         playerMaxHP: app.world.health.max,
+        needs: { ...app.world.needs },
+        needsEffects: app.world.needsEffects,
+        npc: app.ui.activeNpc,
+        hubNpcs: app.world.npcs.map((n) => ({
+          id: n.id,
+          pos: { ...n.pos },
+          walkable: walkable(app.world.layout, n.pos.x, n.pos.y),
+        })),
         combatStats: app.world.stats(),
         targets: app.world.enemies.map((e) => ({
           hp: e.health.hp,
@@ -349,6 +446,15 @@ if (new URLSearchParams(location.search).get("test") === "1") {
         app.world.health.immune = 0;
         app.world.takeDamage(9999);
       },
+      nearNpc: (id: string) => {
+        const n = app.world.npcs.find((n) => n.id === id);
+        if (n) app.world.pos = { x: n.pos.x - 34, y: n.pos.y + 14 };
+      },
+      setNeeds: (hunger: number, thirst: number, cold: number) => {
+        Object.assign(app.world.needs, { hunger, thirst, cold, strain: 0 });
+      },
+      tryService: (service: string, value = "") =>
+        app.ui.action(service, value),
       clearEncounter: () => {
         for (const e of app.world.enemies) {
           e.health.dead = true;

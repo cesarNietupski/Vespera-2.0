@@ -22,16 +22,39 @@ try {
   await page.screenshot({ path: "docs/screenshots/menu.png" });
   await page.locator('[data-action="hub"]').click();
   await page.screenshot({ path: "docs/screenshots/farol.png" });
-  await page.locator('[data-action="talents"]').click();
-  await page.locator('[data-skill="vitality"]').waitFor();
-  await page.locator(".panel").evaluate((el) => (el.scrollTop = 350));
-  await page.screenshot({ path: "docs/screenshots/skilltree.png" });
+  await page.keyboard.press("i");
+  await page.locator('[data-action="inventoryTab"][data-value="resources"]').click();
+  if (await page.locator("[data-stock]").count() !== 8)
+    throw new Error("O inventário deve exibir os oito recursos.");
+  await page.screenshot({ path: "docs/screenshots/inventario-recursos.png" });
+  await page.locator('[data-action="inventoryTab"][data-value="provisions"]').click();
+  await page.screenshot({ path: "docs/screenshots/inventario.png" });
+  await page.keyboard.press("i");
+  await page.keyboard.down("d");
+  await page.keyboard.down("s");
+  await page.locator("#interaction").filter({ hasText: "LUME" }).waitFor();
+  await page.keyboard.up("d");
+  await page.keyboard.up("s");
+  await page.keyboard.press("e");
+  await page.locator('[data-action="npcService"][data-value="lume"]').click();
+  await page.locator('[data-recipe="ration"] button').click();
+  await page.screenshot({ path: "docs/screenshots/cozinha.png" });
   await page.locator(".close-button").click();
-  await page.locator('[data-action="armory"]').click();
-  await page.locator(".forge-cards").waitFor();
-  await page.screenshot({ path: "docs/screenshots/forja.png" });
-  await page.locator(".close-button").click();
-  await page.locator('[data-action="expedition"]').click();
+  for (let i = 0; i < 12; i++) {
+    if (
+      (await page.locator("#interaction").textContent())?.includes(
+        "INICIAR EXPEDIÇÃO",
+      )
+    )
+      break;
+    await page.keyboard.down("d");
+    await page.keyboard.down("s");
+    await page.waitForTimeout(350);
+    await page.keyboard.up("s");
+    await page.waitForTimeout(150);
+    await page.keyboard.up("d");
+  }
+  await page.keyboard.press("e");
   await page.locator("#seed-input").fill("ULTIMA-AURORA");
   await page.locator('[data-action="start"]').click();
   await page.keyboard.down("d");
@@ -46,7 +69,7 @@ try {
   if (errors.length || remote.length)
     throw new Error(JSON.stringify({ errors, remote }));
   console.log(
-    "Produção: menu, Farol, árvore de habilidades, forja, assets, expedição, movimento, ataque e esquiva OK; zero erros e zero requisições externas.",
+    "Produção: menu, Farol com seis moradores, inventário pela tecla I, oito recursos, provisões, caminhar e conversar com Lume, preparar ração, portal, expedição, necessidades, ataque e esquiva OK; zero erros e zero requisições externas.",
   );
 } finally {
   await browser.close();

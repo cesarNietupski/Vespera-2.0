@@ -867,6 +867,54 @@ export function propFrame(kind, f = 0, count = 1) {
       }
     }
     c.gem(48, 15, 3, "#9ab8c1");
+  } else if (kind === "cookpot") {
+    line([24, 86], [30, 49], GOLD[1], 4);
+    line([71, 85], [66, 49], GOLD[1], 4);
+    line([27, 50], [69, 50], GOLD[2], 3);
+    c.ellipse(48, 72, 23, 13, "#26323d", INK);
+    c.ellipse(48, 64, 23, 9, "#536168", INK);
+    c.ellipse(48, 62, 19, 6, "#bb8152", GOLD[1]);
+    for (let j = 0; j < 12; j++)
+      c.rect(35 + r() * 24, 59 + r() * 7, 2, 1, j % 2 ? "#7e9b64" : "#e2b979");
+    c.ring(48, 79, 13, 5, "#da8c4c");
+    for (let j = 0; j < 3; j++)
+      line([39 + j * 9, 54], [37 + j * 9, 42 - j * 3], "#b4c1a380", 2);
+    c.rect(35, 84, 26, 3, GOLD[0]);
+  } else if (kind === "cistern") {
+    c.ellipse(45, 79, 20, 10, GOLD[1], INK);
+    c.rect(25, 49, 40, 30, "#76503d");
+    for (let j = 0; j < 7; j++)
+      line([28 + j * 5, 53], [28 + j * 5, 78], j % 2 ? "#9f7951" : "#563c34");
+    c.ellipse(45, 49, 20, 10, GOLD[2], INK);
+    c.ellipse(45, 48, 16, 7, "#4d8b94", INK);
+    line([29, 62], [61, 62], STONE[3], 3);
+    line([29, 74], [61, 74], STONE[2], 3);
+    line([67, 75], [67, 27], STONE[2], 5);
+    line([66, 27], [78, 31], STONE[3], 4);
+    line([77, 30], [77, 43], STONE[2], 3);
+    line([64, 35], [55, 29], GOLD[2], 3);
+    c.ellipse(57, 29, 3, 2, GOLD[3]);
+    c.ellipse(77, 48, 2, 4, "#a4d9d3");
+  } else if (kind === "loom") {
+    for (const x of [25, 69]) {
+      line([x, 84], [x, 25], GOLD[2], 5);
+      line([x - 5, 87], [x + 7, 82], GOLD[1], 4);
+    }
+    line([24, 27], [71, 27], GOLD[3], 5);
+    line([24, 76], [70, 76], GOLD[2], 4);
+    c.rect(31, 34, 33, 38, "#7c536e");
+    for (let j = 0; j < 12; j++)
+      line(
+        [32 + j * 2.5, 31],
+        [32 + j * 2.5, 72],
+        j % 2 ? "#c49a97" : "#a37c89",
+      );
+    for (let j = 0; j < 7; j++)
+      line([31, 49 + j * 3], [63, 49 + j * 3], j % 2 ? "#d7b092" : "#65405c");
+    line([29, 46], [67, 46], GOLD[3], 3);
+    c.ellipse(77, 78, 8, 7, "#c39986", GOLD[1]);
+    for (let j = 0; j < 4; j++)
+      line([72, 74 + j * 2], [82, 76 + j * 2], "#ead0a1");
   }
   return c;
 }

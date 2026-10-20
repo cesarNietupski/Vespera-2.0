@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import type { EnemyKind, Layout, Prop, Vec } from "../types";
+import type { EnemyKind, Layout, Prop, Vec, NpcId } from "../types";
 import type { App } from "../main";
 import { BALANCE, BIOMES, ENEMIES, TILE, WEAPONS } from "./config";
 import {
@@ -20,6 +20,8 @@ import { ANIMATIONS, HERO_FRAMES, BOSS_PATTERNS, framesFor } from "./animation";
 import { AttackBuffer, COMBOS, comboMove } from "./combos";
 import { obscuresActor, approachAlpha } from "./presentation";
 import { progressionStats, awardRoomSalvage, MATERIALS } from "./crafting";
+import { HUB_NPCS } from "../data/npcs";
+import { tickNeeds, survivalEffects, grantSurvivalLoot } from "./survival";
 
 type AIState =
   | "idle"
@@ -95,6 +97,9 @@ export class Preload extends Phaser.Scene {
       "salvia",
       "orren",
       "nim",
+      "lume",
+      "caio",
+      "iria",
       "swordsman",
       "archer",
       "guardian",
@@ -133,7 +138,16 @@ export class World extends Phaser.Scene {
     kind: string;
     phase: number;
   }[] = [];
-  npcs: { visual: ActorVisual; pos: Vec }[] = [];
+  npcs: { id: NpcId; visual: ActorVisual; pos: Vec }[] = [];
+  survivalSaveTimer = 0;
+  get needs() {
+    return this.app.run?.needs ?? this.app.store.data.needs;
+  }
+  get needsEffects() {
+    return survivalEffects(
+      this.isHub ? { hunger: 0, thirst: 0, cold: 0, strain: 0 } : this.needs,
+    );
+  }
   pendingActions = new Set<string>();
   actions = new Set<string>();
   layout!: Layout;
@@ -173,6 +187,7 @@ export class World extends Phaser.Scene {
   lastDash = 0;
   ready = false;
   cleared = false;
+  rewardPending = false;
   pendingWave = 0;
   waveTimer = 0;
   stepTime = 0;
@@ -195,12 +210,12 @@ export class World extends Phaser.Scene {
   create(): void {
     this.app.world = this;
     const kb = this.input.keyboard!;
-    this.keys = kb.addKeys("W,A,S,D,SPACE,SHIFT,E,Q,TAB,ESC") as Record<
+    this.keys = kb.addKeys("W,A,S,D,SPACE,SHIFT,E,Q,R,T,TAB,ESC") as Record<
       string,
       Phaser.Input.Keyboard.Key
     >;
     kb.addCapture(["SPACE", "TAB", "W", "A", "S", "D"]);
-    for (const key of ["SPACE", "SHIFT", "E", "Q"])
+    for (const key of ["SPACE", "SHIFT", "E", "Q", "R", "T"])
       this.keys[key].on("down", () => this.pendingActions.add(key));
     this.input.mouse?.disableContextMenu();
     this.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
@@ -269,6 +284,8 @@ export class World extends Phaser.Scene {
           : fallback;
   }
   clearRoom(): void {
+    this.app.ui.activeNpc = null;
+    this.survivalSaveTimer = 0;
     this.attackBuffer.clear();
     this.comboHistory = [];
     this.combo = 0;
@@ -300,6 +317,7 @@ export class World extends Phaser.Scene {
     this.hold = 0;
     this.escort = null;
     this.cleared = false;
+    this.rewardPending = false;
     this.pendingWave = 0;
     this.hitstop = 0;
     this.resurrectTime = 0;
@@ -320,36 +338,70 @@ export class World extends Phaser.Scene {
     this.app.audio.biome = -1;
     this.app.audio.combat = false;
     this.layout = generateLayout("farol-v1");
+    // Open resident pads and connect each to the arrival gallery.
+    for (const npc of HUB_NPCS) {
+      for (let x = 3; x <= npc.x; x++)
+        for (const y of [9, 10]) this.layout.cells[y][x] = 1;
+      for (let y = Math.min(9, npc.y); y <= Math.max(9, npc.y); y++)
+        for (const x of [npc.x, npc.x + 1]) this.layout.cells[y][x] = 1;
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++)
+          this.layout.cells[npc.y + dy][npc.x + dx] = 1;
+    }
     this.layout.props = this.layout.props.filter(
-      (p) => p.kind !== "tree" && p.kind !== "flower",
+      (p) =>
+        p.kind !== "tree" &&
+        p.kind !== "flower" &&
+        !HUB_NPCS.some(
+          (n) =>
+            distance(p, { x: (n.x + 0.5) * TILE, y: (n.y + 0.5) * TILE }) < 70,
+        ) &&
+        (!p.solid ||
+          !this.layout.cells[Math.floor(p.y / TILE)][Math.floor(p.x / TILE)]),
     );
     this.pos = { ...this.layout.spawn };
     this.health = new Vitality(this.maxHP());
     this.resurrectTime = this.app.store.data.deaths > 0 ? 1.2 : 0;
     this.elapsed = 0;
     this.buildEnvironment(0, true);
-    this.player = new ActorVisual(this, "eira");
+    this.player = new ActorVisual(
+      this,
+      this.app.weapon === "blade" ? "eira" : `eira-${this.app.weapon}`,
+    );
     this.effects = new Effects(this, this.particleCount());
     this.objective = new Objective("eliminate");
     this.objective.state = "completed";
-    this.spawnNPC("Sálvia", 10, 6, "salvia");
-    this.spawnNPC("Orren", 9, 12, "orren");
-    this.spawnNPC("Nim", 15, 7, "nim");
+    for (const npc of HUB_NPCS) {
+      this.spawnNPC(npc.id);
+      if (npc.station) {
+        const p = project({ x: (npc.x + 1.5) * TILE, y: (npc.y - 0.5) * TILE });
+        this.own(
+          this.add
+            .image(p.x, p.y, "props", npc.station)
+            .setOrigin(0.5, 0.9)
+            .setScale(0.8)
+            .setDepth(p.y),
+        );
+      }
+    }
     this.configureCamera();
     this.app.ui.hud();
   }
-  spawnNPC(name: string, x: number, y: number, texture: string): void {
+  spawnNPC(id: NpcId): void {
+    const { name, x, y, role } = HUB_NPCS.find((n) => n.id === id)!;
     const pos = { x: (x + 0.5) * TILE, y: (y + 0.5) * TILE },
       q = project(pos),
-      visual = new ActorVisual(this, texture);
+      visual = new ActorVisual(this, id);
     this.own(visual.sprite);
     this.own(visual.shadow);
-    this.npcs.push({ visual, pos });
+    this.npcs.push({ id, visual, pos });
     this.own(
       this.add
-        .text(q.x, q.y - visual.height - 12, name, {
+        .text(q.x, q.y - visual.height - 12, `${name}\n${role}`, {
           fontFamily: "Trebuchet MS, Segoe UI, sans-serif",
-          fontSize: "18px",
+          fontSize: "15px",
+          align: "center",
+          lineSpacing: 3,
           color: "#f8e9bc",
           stroke: "#15202b",
           strokeThickness: 3,
@@ -357,6 +409,10 @@ export class World extends Phaser.Scene {
         .setOrigin(0.5)
         .setDepth(1750),
     );
+  }
+  nearNpc(id: NpcId): boolean {
+    const npc = this.npcs.find((n) => n.id === id);
+    return this.isHub && !!npc && distance(this.pos, npc.pos) < 76;
   }
   enterRoom(): void {
     this.clearRoom();
@@ -834,7 +890,8 @@ export class World extends Phaser.Scene {
       n = HERO_FRAMES[style];
     const duration =
       (w.duration * (charged ? 1.8 : move.duration)) /
-      (1 + Math.min(0.5, this.stats().attackSpeed ?? 0));
+      ((1 + Math.min(0.5, this.stats().attackSpeed ?? 0)) *
+        this.needsEffects.attackRate);
     this.comboTime = duration + 1.1;
     this.attack = new AttackTimeline(
       n,
@@ -858,7 +915,9 @@ export class World extends Phaser.Scene {
     this.facing = this.aim();
     this.attack = new AttackTimeline(
       HERO_FRAMES.charged,
-      0.6 / (1 + Math.min(0.5, this.stats().attackSpeed ?? 0)),
+      0.6 /
+        ((1 + Math.min(0.5, this.stats().attackSpeed ?? 0)) *
+          this.needsEffects.attackRate),
       Math.floor(HERO_FRAMES.charged * 0.4),
       Math.floor(HERO_FRAMES.charged * 0.62),
       this.facing,
@@ -998,11 +1057,14 @@ export class World extends Phaser.Scene {
       onComplete: () => text.destroy(),
     });
   }
-  takeDamage(amount: number): void {
+  takeDamage(amount: number, environment = false): void {
     if (this.isHub || this.health.dead) return;
     const stats = this.stats();
-    const value = Math.max(1, amount * (1 - Math.min(0.7, stats.armor ?? 0)));
-    if (!this.health.hit(value, BALANCE.invulnerability)) return;
+    const value = Math.max(
+      1,
+      amount * (environment ? 1 : 1 - Math.min(0.7, stats.armor ?? 0)),
+    );
+    if (!this.health.hit(value, BALANCE.invulnerability, environment)) return;
     this.hurtTime = 0.24;
     this.objective.damageTaken += value;
     this.effects.burst(this.pos, 0xff968b, 12, 130);
@@ -1071,6 +1133,35 @@ export class World extends Phaser.Scene {
       );
       this.effects.update(dt);
       return;
+    }
+    const ppNeeds = project(this.pos),
+      nearFire = this.ambientAnimations.some(
+        (a) =>
+          ["torch", "forge"].includes(a.kind) &&
+          Math.hypot(a.image.x - ppNeeds.x, a.image.y - ppNeeds.y) < 85,
+      );
+    const exposureDamage = tickNeeds(
+      this.needs,
+      dt,
+      this.app.run?.nodes[this.app.run.current].biome ?? 0,
+      this.app.store.data.clothing,
+      this.isHub,
+      nearFire,
+    );
+    if (exposureDamage) this.takeDamage(exposureDamage, true);
+    if (this.health.dead) return;
+    if (this.consume("R"))
+      this.app.consume(
+        this.app.store.data.provisions.ration > 0 ? "ration" : "stew",
+      );
+    if (this.consume("T"))
+      this.app.consume(
+        this.app.store.data.provisions.water > 0 ? "water" : "tea",
+      );
+    this.survivalSaveTimer += dt;
+    if (this.survivalSaveTimer >= 5) {
+      this.survivalSaveTimer = 0;
+      this.app.saveCheckpoint();
     }
     if (this.hold > 0) {
       this.hold += dt;
@@ -1150,6 +1241,7 @@ export class World extends Phaser.Scene {
           speed =
             BALANCE.speed *
             (1 + (stats.speed ?? 0)) *
+            this.needsEffects.speed *
             (this.attack?.active ? 0.5 : 1);
         this.move(this.pos, (v.x / len) * speed * dt, (v.y / len) * speed * dt);
         moving = true;
@@ -1257,6 +1349,7 @@ export class World extends Phaser.Scene {
         (1 + (stats.area ?? 0));
     const base =
       w.damage *
+      this.needsEffects.damage *
       a.power *
       (1 + (stats.damage ?? 0)) *
       (a.style === "charged" ? 1 + (stats.charged ?? 0) : 1) *
@@ -1951,6 +2044,7 @@ export class World extends Phaser.Scene {
     const bonus = this.objective.secondary().filter((x) => x.success).length;
     run.coins += 20 + bonus * 8;
     const salvage = awardRoomSalvage(this.app.store.data, node, run.visited);
+    if (salvage) grantSurvivalLoot(this.app.store.data, node);
     if (salvage)
       this.app.ui.toast(
         `Materiais preservados: ${MATERIALS.filter((m) => salvage[m.id] > 0)
@@ -1972,19 +2066,22 @@ export class World extends Phaser.Scene {
     );
     if (node.kind === "boss" && node.biome === 3)
       this.time.delayedCall(1500, () => this.app.ui.endingChoice());
-    else if (!["event", "shop", "explore", "secret"].includes(node.kind))
+    else if (!["event", "shop", "explore", "secret"].includes(node.kind)) {
+      this.rewardPending = true;
       this.time.delayedCall(650, () => this.app.ui.rewards());
+    }
   }
   updateHubInteraction(): void {
-    const npcs = [
-      { name: "Sálvia", x: 10.5 * TILE, y: 6.5 * TILE },
-      { name: "Orren", x: 9.5 * TILE, y: 12.5 * TILE },
-      { name: "Nim", x: 15.5 * TILE, y: 7.5 * TILE },
-    ];
-    const npc = npcs.find((n) => distance(this.pos, n) < 80);
+    const npc = this.npcs
+      .filter((n) => this.nearNpc(n.id))
+      .sort((a, b) => distance(a.pos, this.pos) - distance(b.pos, this.pos))[0];
     if (npc) {
-      this.app.ui.interaction("E", `CONVERSAR COM ${npc.name.toUpperCase()}`);
-      if (this.consume("E")) this.app.ui.dialogue(npc.name);
+      const def = HUB_NPCS.find((n) => n.id === npc.id)!;
+      this.app.ui.interaction(
+        "E",
+        `CONVERSAR COM ${def.name.toUpperCase()} · ${def.role}`,
+      );
+      if (this.consume("E")) this.app.ui.dialogue(npc.id);
     } else if (distance(this.pos, this.layout.exit) < 120) {
       this.app.ui.interaction("E", "INICIAR EXPEDIÇÃO");
       if (this.consume("E")) this.app.ui.expedition();
@@ -2018,7 +2115,7 @@ export class World extends Phaser.Scene {
     for (const actor of this.npcs)
       actor.visual.update(
         actor.pos,
-        this.app.ui.screen === "dialogue" ? "interact" : "idle",
+        this.app.ui.activeNpc === actor.id ? "interact" : "idle",
         0,
         dt,
       );

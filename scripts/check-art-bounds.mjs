@@ -12,6 +12,13 @@ function edge(c) {
   return n;
 }
 const result = {};
+for (const npc of ["salvia", "orren", "nim", "lume", "caio", "iria"])
+  for (const [state, count] of Object.entries(a.npc))
+    for (let d = 0; d < 8; d++)
+      for (let f = 0; f < count; f++) {
+        const n = edge(heroFrame(state, f, count, d, "blade", npc));
+        if (n) (result[`${npc}:${state}`] ??= []).push([d, f, n]);
+      }
 for (const weapon of ["blade", "hammer", "bow"])
   for (const [state, count] of Object.entries(a.hero))
     for (let d = 0; d < 8; d++)

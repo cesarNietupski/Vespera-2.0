@@ -59,6 +59,33 @@ export function dialogue(
         "Cada arma lembra um jeito diferente de perder. Aprenda um jeito novo de voltar.",
       ],
     };
+  if (who === "Lume")
+    return {
+      speaker: who,
+      role: "Cozinheira do Farol",
+      lines: [
+        "Fome nenhuma respeita uma espada. Traga grãos e ervas; eu preparo algo que aguente a estrada.",
+        "Uma ração cabe no bolso. Um ensopado também aquece. Use R para comer ou abra suas Provisões para escolher.",
+      ],
+    };
+  if (who === "Caio")
+    return {
+      speaker: who,
+      role: "Guardião das Águas",
+      lines: [
+        "Água das ruínas precisa de cuidado. Eu a purifico; com ervas, preparo um chá que espanta o frio.",
+        "Nas Forjas a sede vem mais depressa. No Arquivo e na Cúpula, leve chá e um bom casaco.",
+      ],
+    };
+  if (who === "Íria")
+    return {
+      speaker: who,
+      role: "Costureira do Abrigo",
+      lines: [
+        "A aurora pode morar dentro de você, mas o vento ainda encontra as frestas. Traga fibras e couro.",
+        "Comece por um manto. Depois faço um casaco forrado. A roupa reduz a exposição; uma fogueira continua sendo bem-vinda.",
+      ],
+    };
   return {
     speaker: "Nim",
     role: "Colecionador de Ecos",

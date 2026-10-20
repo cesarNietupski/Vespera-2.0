@@ -3,6 +3,13 @@ import { generateRun } from "./procedural";
 import { BOONS } from "../data/boons";
 import { SKILLS, skillRank } from "../data/skills";
 import { INFUSIONS, MATERIALS } from "./crafting";
+import {
+  freshNeeds,
+  SURVIVAL_MATERIALS,
+  CONSUMABLES,
+  CLOTHING,
+} from "./survival";
+import type { Needs } from "../types";
 const KEY = "vespera.save.v2";
 export function freshSave(): Save {
   return {
@@ -16,6 +23,11 @@ export function freshSave(): Save {
     weaponLevels: { blade: 0, hammer: 0, bow: 0 },
     infusions: { blade: "none", hammer: "none", bow: "none" },
     equipped: "blade",
+    needs: freshNeeds(),
+    survivalMaterials: { grain: 6, herb: 4, rawWater: 8, fiber: 8, hide: 2 },
+    provisions: { ration: 2, stew: 0, water: 2, tea: 0 },
+    wardrobe: ["none"],
+    clothing: "none",
     unlocked: ["blade"],
     memories: [],
     bosses: [],
@@ -34,6 +46,15 @@ const strings = (a: unknown): string[] =>
   Array.isArray(a)
     ? a.filter((x): x is string => typeof x === "string").slice(0, 200)
     : [];
+export function parseNeeds(x: unknown): Needs {
+  const raw = x && typeof x === "object" ? (x as Record<string, unknown>) : {};
+  return {
+    hunger: finite(raw.hunger, 0, 0, 100),
+    thirst: finite(raw.thirst, 0, 0, 100),
+    cold: finite(raw.cold, 0, 0, 100),
+    strain: finite(raw.strain, 0, 0, 4.999),
+  };
+}
 export function parseSave(raw: string | null): Save {
   const d = freshSave();
   try {
@@ -77,6 +98,24 @@ export function parseSave(raw: string | null): Save {
         d.infusions[id] = x.infusions[id];
     }
     if (d.unlocked.includes(x.equipped)) d.equipped = x.equipped;
+    d.needs = parseNeeds(x.needs);
+    if (x.survivalMaterials && typeof x.survivalMaterials === "object")
+      for (const m of SURVIVAL_MATERIALS)
+        d.survivalMaterials[m.id] = Math.floor(
+          finite(x.survivalMaterials[m.id], 0),
+        );
+    if (x.provisions && typeof x.provisions === "object")
+      for (const item of CONSUMABLES)
+        d.provisions[item.id] = Math.floor(
+          finite(x.provisions[item.id], 0, 0, 999),
+        );
+    d.wardrobe = [
+      "none",
+      ...CLOTHING.filter(
+        (c) => c.id !== "none" && strings(x.wardrobe).includes(c.id),
+      ).map((c) => c.id),
+    ];
+    if (d.wardrobe.includes(x.clothing)) d.clothing = x.clothing;
     d.memories = strings(x.memories);
     d.achievements = strings(x.achievements);
     d.endings = strings(x.endings);
@@ -129,6 +168,7 @@ export function parseSave(raw: string | null): Save {
         coins: finite(x.run.coins, 0),
         kills: finite(x.run.kills, 0),
         charge: finite(x.run.charge, 0, 0, 100),
+        needs: parseNeeds(x.run.needs ?? x.needs),
         hp: finite(x.run.hp, 120, 1, 999),
         started: finite(x.run.started, Date.now(), 0, Number.MAX_SAFE_INTEGER),
       };
@@ -171,9 +211,16 @@ export function newRun(seed: string, weapon: WeaponId, maxHP: number): Run {
     weapon,
     hp: maxHP,
     charge: 0,
+    needs: freshNeeds(),
   };
 }
 export function finishRun(save: Save, run: Run, result: string): void {
+  save.needs = {
+    hunger: Math.min(40, run.needs.hunger),
+    thirst: Math.min(40, run.needs.thirst),
+    cold: 0,
+    strain: 0,
+  };
   save.echoes += Math.max(
     4,
     Math.floor(run.kills / 2) + run.visited.length * 3,

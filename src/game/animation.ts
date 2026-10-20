@@ -8,7 +8,7 @@ export function framesFor(texture: string, state: string): number {
     ? data.hero
     : texture.startsWith("boss")
       ? data.boss
-      : ["salvia", "orren", "nim"].includes(texture)
+      : ["salvia", "orren", "nim", "lume", "caio", "iria"].includes(texture)
         ? data.npc
         : data.enemy;
   return set[state] ?? set.idle;

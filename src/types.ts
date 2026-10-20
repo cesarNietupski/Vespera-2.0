@@ -5,6 +5,28 @@ export interface Vec {
 export type WeaponId = "blade" | "hammer" | "bow";
 export type MaterialId = "iron" | "glass" | "ember";
 export type InfusionId = "none" | "glass" | "ember" | "tide";
+export type NpcId = "salvia" | "orren" | "nim" | "lume" | "caio" | "iria";
+export type NpcService =
+  | "skills"
+  | "forge"
+  | "memories"
+  | "food"
+  | "drink"
+  | "clothes";
+export type SurvivalMaterialId =
+  | "grain"
+  | "herb"
+  | "rawWater"
+  | "fiber"
+  | "hide";
+export type ConsumableId = "ration" | "stew" | "water" | "tea";
+export type ClothingId = "none" | "cloak" | "coat";
+export interface Needs {
+  hunger: number;
+  thirst: number;
+  cold: number;
+  strain: number;
+}
 export type School = "Vidro" | "Cinza" | "Maré" | "Eco";
 export type EnemyKind =
   | "swordsman"
@@ -73,6 +95,7 @@ export interface Run {
   weapon: WeaponId;
   hp: number;
   charge: number;
+  needs: Needs;
 }
 export interface Settings {
   music: number;
@@ -91,6 +114,11 @@ export interface Save {
   weaponLevels: Record<WeaponId, number>;
   infusions: Record<WeaponId, InfusionId>;
   equipped: WeaponId;
+  needs: Needs;
+  survivalMaterials: Record<SurvivalMaterialId, number>;
+  provisions: Record<ConsumableId, number>;
+  wardrobe: ClothingId[];
+  clothing: ClothingId;
   unlocked: WeaponId[];
   memories: string[];
   bosses: number[];

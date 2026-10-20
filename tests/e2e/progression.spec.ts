@@ -1,3 +1,4 @@
+import { openNpc } from "./helpers";
 import { test, expect, type Page } from "@playwright/test";
 import { freshSave } from "../../src/game/save";
 async function boot(page: Page, funded = true) {
@@ -24,7 +25,7 @@ test("árvore respeita requisitos, aplica atributos e permite redistribuir após
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await boot(page);
-  await page.locator('[data-action="talents"]').click();
+  await openNpc(page, "salvia");
   await expect(page.locator('[data-skill="shell"] button')).toBeDisabled();
   await page.locator('[data-skill="vitality"] button').click();
   await expect(page.locator('[data-skill="shell"] button')).toBeEnabled();
@@ -37,7 +38,7 @@ test("árvore respeita requisitos, aplica atributos e permite redistribuir após
   await page.screenshot({ path: "test-results/skilltree.png" });
   await page.reload();
   await page.locator('[data-action="hub"]').click();
-  await page.locator('[data-action="talents"]').click();
+  await openNpc(page, "salvia");
   await expect(
     page.locator('[data-skill="shell"] .skill-node-head b'),
   ).toHaveText("1/3");
@@ -54,7 +55,7 @@ test("oficina forja, aprimora e infunde arma persistente com efeito real no comb
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await boot(page);
-  await page.locator('[data-action="armory"]').click();
+  await openNpc(page, "orren");
   const hammer = page.locator('.forge-card[data-weapon="hammer"]');
   await hammer
     .getByRole("button", { name: "Forjar arma", exact: true })
@@ -85,7 +86,7 @@ test("oficina forja, aprimora e infunde arma persistente com efeito real no comb
   expect(s.infusions.hammer).toBe("ember");
   await page.reload();
   await page.locator('[data-action="hub"]').click();
-  await page.locator('[data-action="armory"]').click();
+  await openNpc(page, "orren");
   await expect(
     hammer.getByRole("button", { name: "Equipada", exact: true }),
   ).toBeDisabled();
@@ -124,7 +125,7 @@ test("materiais de uma câmara restaurada sobrevivem à morte e ao recarregament
   await page.getByRole("button", { name: "Ressurgir no Farol →" }).click();
   await page.reload();
   await page.locator('[data-action="hub"]').click();
-  await page.locator('[data-action="armory"]').click();
+  await openNpc(page, "orren");
   expect((await save(page)).materials).toEqual(found.materials);
   await expect(page.locator('[data-material="iron"]')).toHaveText("7");
 });

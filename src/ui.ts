@@ -1,11 +1,28 @@
 import type { App } from "./main";
-import type { Run, WeaponId, InfusionId } from "./types";
+import type {
+  Run,
+  WeaponId,
+  InfusionId,
+  NpcId,
+  NpcService,
+  ConsumableId,
+  ClothingId,
+} from "./types";
 import { BALANCE, BIOMES, WEAPONS } from "./game/config";
 import { BOONS, SCHOOL_COLORS, boonStats } from "./data/boons";
 import { dialogue, MEMORIES } from "./data/narrative";
 import { rng } from "./game/procedural";
 import { comboMove } from "./game/combos";
 import { OBJECTIVES } from "./game/objectives";
+import { HUB_NPCS, hubNpc } from "./data/npcs";
+import {
+  CONSUMABLES,
+  CLOTHING,
+  SURVIVAL_MATERIALS,
+  SURVIVAL_RECIPES,
+  survivalCraftBlock,
+  consumableBlock,
+} from "./game/survival";
 import {
   SKILLS,
   SKILL_BRANCHES,
@@ -46,7 +63,11 @@ export type Screen =
   | "event"
   | "routes"
   | "controls"
-  | "credits";
+  | "credits"
+  | "survivalCraft"
+  | "provisions"
+  | "inventory";
+type InventoryTab = "provisions" | "resources" | "clothes" | "equipment";
 const escape = (s: string): string =>
   s.replace(
     /[&<>"']/g,
@@ -57,6 +78,7 @@ const escape = (s: string): string =>
   );
 const icons = { diamond: "◇", sun: "☼", echo: "◈", blade: "⟋", map: "⌘" };
 export class UI {
+  activeNpc: NpcId | null = null;
   screen: Screen = "loading";
   root = document.getElementById("ui")!;
   overlay: HTMLElement;
@@ -67,6 +89,7 @@ export class UI {
   skillBranch: SkillBranch = "vigor";
   forgeMode: CraftAction = "forge";
   infusionChoice: InfusionId = "glass";
+  inventoryTab: InventoryTab = "provisions";
   constructor(public app: App) {
     this.root.innerHTML =
       '<div id="hud"></div><div id="overlay"></div><div id="announcement" aria-live="polite"></div><div id="toast" role="status"></div><div id="interaction"></div>';
@@ -117,6 +140,7 @@ export class UI {
     this.overlay.innerHTML = `<div class="panel"><h2>A luz encontrou um obstáculo.</h2><p>${escape(s)}</p></div>`;
   }
   menu(): void {
+    this.activeNpc = null;
     if (this.app.world) {
       this.app.world.time.paused = true;
       this.app.world.input.keyboard!.enabled = false;
@@ -156,6 +180,7 @@ export class UI {
     );
   }
   close(): void {
+    this.activeNpc = null;
     this.overlay.innerHTML = "";
     this.overlay.className = "";
     this.screen = "play";
@@ -172,7 +197,10 @@ export class UI {
     if (!world) return;
     const run = this.app.run,
       b = run ? BIOMES[run.nodes[run.current].biome] : null;
-    this.hudEl.innerHTML = `<header class="game-top"><div class="region">${this.px("sun", "mini-logo")}<div><div class="eyebrow">${world.isHub ? "UM LUGAR ENTRE OS INSTANTES" : b!.eyebrow}</div><h3>${world.isHub ? "Farol dos Ecos" : b!.name}</h3></div></div><div class="top-actions"><span class="currency">${this.px("echo")} <span id="echoes">${this.app.store.data.echoes}</span> <small>ECOS</small></span>${run ? '<span class="currency gold"><img class="px-icon" src="assets/icon-coin.png" alt="Óbolos"> <span id="coins">0</span></span>' : ""}${this.button(`${this.px("map")}<small>TAB</small>`, "map", "", "icon-button")}${this.button(`${this.px("pause")}<small>ESC</small>`, "pause", "", "icon-button")}</div></header><aside id="objective-panel" class="objective-panel"></aside><div id="boss-hud"></div><footer class="game-bottom"><div class="health-block"><img class="hud-portrait" src="assets/portrait-eira.png" alt=""><div class="health-content"><div class="player-id"><b>EIRA</b><small>TECELÃ DA ÚLTIMA LUZ</small><span id="health-number"></span></div><div class="health-track"><i id="health-fill"></i></div><div class="energy-track"><i id="energy-fill"></i></div><div class="weapon-name">${weaponName(this.app.store.data, run?.weapon ?? this.app.weapon, WEAPONS[run?.weapon ?? this.app.weapon].name)} <span>· ${WEAPONS[run?.weapon ?? this.app.weapon].subtitle}</span></div><div id="combo-status" class="combo-status"></div></div></div><div id="skillbar" class="skillbar"><div><kbd>ESPAÇO</kbd><b id="dash-state">⟡</b><small>ESQUIVA</small></div><div><kbd>M2</kbd><b id="special-state">✦</b><small>ESPECIAL</small></div><div><kbd>SHIFT</kbd><b id="alt-state">⌁</b><small>RUPTURA</small></div><div><kbd>Q</kbd><b id="ult-state">☼</b><small>AURORA</small></div></div><div id="boon-strip" class="boon-strip"></div></footer>${world.isHub ? `<aside class="hub-tools"><div class="eyebrow">O FAROL GUARDA</div>${this.button(`${this.px("blade")}<span>Oficina de Orren<small>Armas e equipamento</small></span>`, "armory")}${this.button(`${this.px("sun")}<span>Altar da centelha<small>Melhorias permanentes</small></span>`, "talents")}${this.button(`${this.px("book")}<span>Galeria de memórias<small>Histórias e conquistas</small></span>`, "gallery")}<div class="hub-start">${this.button("Iniciar expedição <b>→</b>", "expedition", "", "primary")}<small>A morte devolve você. As memórias ficam.</small></div></aside>` : ""}`;
+    this.hudEl.innerHTML = `<header class="game-top"><div class="region">${this.px("sun", "mini-logo")}<div><div class="eyebrow">${world.isHub ? "UM LUGAR ENTRE OS INSTANTES" : b!.eyebrow}</div><h3>${world.isHub ? "Farol dos Ecos" : b!.name}</h3></div></div><div class="top-actions"><span class="currency">${this.px("echo")} <span id="echoes">${this.app.store.data.echoes}</span> <small>ECOS</small></span>${run ? '<span class="currency gold"><img class="px-icon" src="assets/icon-coin.png" alt="Óbolos"> <span id="coins">0</span></span>' : ""}${this.button(`${this.px("map")}<small>TAB</small>`, "map", "", "icon-button")}${this.button(`${this.px("pause")}<small>ESC</small>`, "pause", "", "icon-button")}</div></header><aside id="objective-panel" class="objective-panel"></aside><div id="boss-hud"></div><footer class="game-bottom"><div class="health-block"><img class="hud-portrait" src="assets/portrait-eira.png" alt=""><div class="health-content"><div class="player-id"><b>EIRA</b><small>TECELÃ DA ÚLTIMA LUZ</small><span id="health-number"></span></div><div class="health-track"><i id="health-fill"></i></div><div class="energy-track"><i id="energy-fill"></i></div><div class="weapon-name">${weaponName(this.app.store.data, run?.weapon ?? this.app.weapon, WEAPONS[run?.weapon ?? this.app.weapon].name)} <span>· ${WEAPONS[run?.weapon ?? this.app.weapon].subtitle}</span></div><div id="combo-status" class="combo-status"></div></div></div><div id="skillbar" class="skillbar"><div><kbd>ESPAÇO</kbd><b id="dash-state">⟡</b><small>ESQUIVA</small></div><div><kbd>M2</kbd><b id="special-state">✦</b><small>ESPECIAL</small></div><div><kbd>SHIFT</kbd><b id="alt-state">⌁</b><small>RUPTURA</small></div><div><kbd>Q</kbd><b id="ult-state">☼</b><small>AURORA</small></div></div><div id="boon-strip" class="boon-strip"></div></footer>${world.isHub ? `<aside class="hub-hint"><b>O Farol é um abrigo.</b> Aproxime-se dos moradores e pressione <kbd>E</kbd> para conversar. Use o portal para partir.</aside>` : ""}`;
+    this.hudEl.insertAdjacentHTML("beforeend", this.needsMarkup());
+    if (run)
+      this.hudEl.insertAdjacentHTML("beforeend", `<aside id="room-return" class="room-return" hidden><b>✓ Câmara restaurada</b><p>Você pode se abastecer e continuar esta expedição depois.</p>${this.button("Voltar ao Farol", "returnToHub")}</aside>`);
     this.updateHUD();
   }
   text(id: string, value: string): void {
@@ -183,6 +211,9 @@ export class UI {
     const w = this.app.world;
     if (!w || this.screen === "menu") return;
     const run = this.app.run;
+    const retreat = document.getElementById("room-return");
+    if (retreat) retreat.hidden = !run || !w.cleared || w.rewardPending;
+    this.updateNeeds();
     this.text("health-number", `${Math.ceil(w.health.hp)} / ${w.health.max}`);
     const h = document.getElementById("health-fill");
     if (h)
@@ -227,7 +258,7 @@ export class UI {
           : o.kind === "defend"
             ? `${Math.floor(o.progress)} / ${o.target}s · Núcleo ${Math.max(0, Math.ceil(o.integrity))}%`
             : `${Math.floor(o.progress)} / ${o.target}`;
-      op.innerHTML = `<div class="eyebrow">${w.cleared ? "✓ CÂMARA RESTAURADA" : ` ${run!.current % 9 >= 7 ? "DESVIO OPCIONAL" : `CÂMARA ${(run!.current % 9) + 1} / 7`} · ${kind === "boss" ? "VIGIA" : "OBJETIVO"}`}</div><h4>${o.definition.title}</h4><p>${w.cleared ? "Atravesse o portal para seguir adiante." : o.definition.instruction}</p><div class="objective-progress"><i style="width:${o.target ? Math.min(100, (o.progress / o.target) * 100) : 100}%"></i></div><small>${w.cleared ? "A passagem está aberta" : progress}</small><div class="secondary">◇ ${o.damageTaken === 0 ? "Sem sofrer dano" : "Uma cicatriz permanece"}<br>◇ ${Math.max(0, Math.ceil(90 - o.elapsed))}s para o desafio de tempo</div>`;
+      op.innerHTML = `<div class="eyebrow">${w.cleared ? "✓ CÂMARA RESTAURADA" : ` ${run!.current % 9 >= 7 ? "DESVIO OPCIONAL" : `CÂMARA ${(run!.current % 9) + 1} / 7`} · ${kind === "boss" ? "VIGIA" : "OBJETIVO"}`}</div><h4>${o.definition.title}</h4><p>${w.cleared ? "Siga pelo portal ou volte ao Farol para se abastecer." : o.definition.instruction}</p><div class="objective-progress"><i style="width:${o.target ? Math.min(100, (o.progress / o.target) * 100) : 100}%"></i></div><small>${w.cleared ? "A passagem está aberta" : progress}</small><div class="secondary">◇ ${o.damageTaken === 0 ? "Sem sofrer dano" : "Uma cicatriz permanece"}<br>◇ ${Math.max(0, Math.ceil(90 - o.elapsed))}s para o desafio de tempo</div>`;
     }
     const boss = w.enemies.find((e) => e.boss && !e.health.dead),
       bh = document.getElementById("boss-hud");
@@ -254,6 +285,125 @@ export class UI {
     return this.app.run
       ? comboMove(this.app.run.weapon, this.app.world.combo).name
       : "";
+  }
+  hasService(service: NpcService): boolean {
+    const npc = this.activeNpc ? hubNpc(this.activeNpc) : undefined;
+    return (
+      !!npc && npc.service === service && !!this.app.world?.nearNpc(npc.id)
+    );
+  }
+  openNpcService(id: string): void {
+    const npc = hubNpc(id);
+    if (!npc || this.activeNpc !== npc.id || !this.hasService(npc.service))
+      return;
+    if (npc.service === "forge") {
+      this.forgeMode = "forge";
+      this.armory(false);
+    } else if (npc.service === "skills") this.talents(false);
+    else if (npc.service === "memories") this.gallery();
+    else this.survivalCraft();
+  }
+  needsMarkup(): string {
+    return `<aside class="survival-hud" aria-label="Necessidades de Eira"><div class="needs-meters">${(
+      [
+        ["hunger", "Fome", "food"],
+        ["thirst", "Sede", "water"],
+        ["cold", "Frio", "coat"],
+      ] as const
+    )
+      .map(
+        ([id, name, icon]) =>
+          `<div class="needs-meter" id="need-${id}" role="meter" aria-label="${name}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span>${this.px(icon)}${name}<b id="need-value-${id}">0%</b></span><div><i id="need-fill-${id}"></i></div></div>`,
+      )
+      .join(
+        "",
+      )}</div><div class="supply-actions">${this.button("R · Comer", "quickEat")}${this.button("T · Beber", "quickDrink")}${this.button("I · Inventário", "provisions")}</div></aside>`;
+  }
+  updateNeeds(): void {
+    const n = this.app.world.needs,
+      s = this.app.store.data;
+    for (const id of ["hunger", "thirst", "cold"] as const) {
+      const el = document.getElementById(`need-${id}`),
+        fill = document.getElementById(`need-fill-${id}`);
+      this.text(`need-value-${id}`, `${Math.round(n[id])}%`);
+      el?.setAttribute("aria-valuenow", String(Math.round(n[id])));
+      el?.classList.toggle("critical", n[id] >= 85);
+      el?.classList.toggle("warning", n[id] >= 60 && n[id] < 85);
+      if (fill) fill.style.width = `${n[id]}%`;
+    }
+    const eat = document.querySelector<HTMLButtonElement>(
+        '[data-action="quickEat"]',
+      ),
+      drink = document.querySelector<HTMLButtonElement>(
+        '[data-action="quickDrink"]',
+      );
+    if (eat) {
+      eat.textContent = `R · Comer (${s.provisions.ration + s.provisions.stew})`;
+      eat.disabled = !!consumableBlock(
+        s,
+        n,
+        s.provisions.ration > 0 ? "ration" : "stew",
+      );
+    }
+    if (drink) {
+      drink.textContent = `T · Beber (${s.provisions.water + s.provisions.tea})`;
+      drink.disabled = !!consumableBlock(
+        s,
+        n,
+        s.provisions.water > 0 ? "water" : "tea",
+      );
+    }
+  }
+  survivalCraft(): void {
+    const npc = this.activeNpc ? hubNpc(this.activeNpc) : undefined;
+    if (
+      !npc ||
+      !["food", "drink", "clothes"].includes(npc.service) ||
+      !this.hasService(npc.service)
+    )
+      return;
+    const scroll =
+        this.screen === "survivalCraft"
+          ? (this.overlay.querySelector(".panel")?.scrollTop ?? 0)
+          : 0,
+      s = this.app.store.data;
+    const materialBar = `<div class="resource-bar">${SURVIVAL_MATERIALS.map((m) => `<span>${this.px(m.icon)}<b>${s.survivalMaterials[m.id]}</b> ${m.name}</span>`).join("")}</div>`;
+    this.modal(
+      npc.service === "food"
+        ? "Calor que alimenta"
+        : npc.service === "drink"
+          ? "Água para o caminho"
+          : "Um abrigo sobre os ombros",
+      `${npc.name.toUpperCase()} · ${npc.role.toUpperCase()}`,
+      `<p>Recursos encontrados nas câmaras ficam guardados no Farol. Prepare a próxima travessia conversando com seus moradores.</p>${materialBar}<div class="cards survival-recipes">${SURVIVAL_RECIPES.filter(
+        (r) => r.service === npc.service,
+      )
+        .map((r) => {
+          const item = CONSUMABLES.find((i) => i.id === r.id),
+            outfit = CLOTHING.find((c) => c.id === r.id),
+            reason = survivalCraftBlock(s, r.id),
+            owned = !!outfit && s.wardrobe.includes(outfit.id);
+          return `<article class="card survival-recipe" data-recipe="${r.id}"><div class="weapon-glyph">${this.px(item?.icon ?? "coat")}</div><h3>${item?.name ?? outfit!.name}</h3><p>${item?.description ?? outfit!.description}</p><strong>${item ? `Na mochila: ${s.provisions[item.id]}` : s.clothing === outfit!.id ? "Vestimenta equipada" : owned ? "Vestimenta confeccionada" : "Ainda não confeccionada"}</strong><div class="recipe-cost">${SURVIVAL_MATERIALS.filter(
+            (m) => r.cost[m.id],
+          )
+            .map(
+              (m) =>
+                `<span class="${s.survivalMaterials[m.id] < (r.cost[m.id] ?? 0) ? "missing" : ""}">${this.px(m.icon)}${r.cost[m.id]} ${m.name}</span>`,
+            )
+            .join(
+              "",
+            )}</div><p class="recipe-reason">${reason || "Ingredientes disponíveis"}</p>${this.button(owned ? (s.clothing === outfit!.id ? "Equipada" : "Vestir") : `Preparar ${item?.name ?? outfit!.name}`, owned ? "wear" : "craftProvision", r.id, "primary", owned ? (s.clothing === outfit!.id ? "Vestimenta já equipada" : "") : reason)}</article>`;
+        })
+        .join(
+          "",
+        )}</div>${npc.service === "clothes" ? `<div class="wardrobe"><h3>Guarda-roupa</h3><div>${CLOTHING.map((c) => this.button(c.name, "wear", c.id, s.clothing === c.id ? "primary" : "", !s.wardrobe.includes(c.id) ? "Ainda não confeccionada" : s.clothing === c.id ? "Já equipada" : "")).join("")}</div></div>` : '<p class="fine-print">Leve as provisões na mochila. Durante a expedição, use R para comer e T para beber; escolha chá ou ensopado pela tela de Provisões.</p>'}`,
+      "survivalCraft",
+      true,
+    );
+    this.overlay.querySelector(".panel")!.scrollTop = scroll;
+  }
+  provisions(): void {
+    this.inventory("provisions");
   }
   interaction(key: string, label: string): void {
     const el = document.getElementById("interaction")!;
@@ -288,8 +438,14 @@ export class UI {
       "expedition",
       true,
     );
+    if (this.app.store.data.run)
+      this.overlay.querySelector(".panel-head")!.insertAdjacentHTML("afterend", `<div class="resume-expedition"><p>Sua expedição está guardada na câmara ${this.app.store.data.run.current + 1}. Vida, óbolos e Juramentos foram preservados.</p>${this.button("Continuar expedição salva →", "continue", "", "primary")}</div>`);
   }
   armory(preserve = true): void {
+    if (!this.hasService("forge")) {
+      this.toast("Aproxime-se de Orren e converse com ele.");
+      return;
+    }
     const scroll =
       preserve && this.screen === "armory"
         ? (this.overlay.querySelector(".panel")?.scrollTop ?? 0)
@@ -362,6 +518,10 @@ export class UI {
       .join("")}</div>`;
   }
   talents(preserve = true): void {
+    if (!this.hasService("skills")) {
+      this.toast("Aproxime-se de Sálvia e converse com ela.");
+      return;
+    }
     const scroll =
       preserve && this.screen === "talents"
         ? (this.overlay.querySelector(".panel")?.scrollTop ?? 0)
@@ -403,6 +563,10 @@ export class UI {
     this.overlay.querySelector(".panel")!.scrollTop = scroll;
   }
   gallery(): void {
+    if (!this.hasService("memories")) {
+      this.toast("Converse com Nim para rever as memórias.");
+      return;
+    }
     const s = this.app.store.data;
     this.modal(
       "O mundo que o Tear esqueceu",
@@ -424,13 +588,16 @@ export class UI {
     );
   }
   dialogue(who: string): void {
-    const d = dialogue(who, this.app.store.data);
+    const npc = hubNpc(who);
+    if (!npc || !this.app.world.nearNpc(npc.id)) return;
+    this.activeNpc = npc.id;
+    const d = dialogue(npc.name, this.app.store.data);
     let page = 0;
     const draw = () => {
       this.modal(
         d.speaker,
-        d.role,
-        `<div class="dialogue-content"><div class="portrait"><img src="assets/portrait-${who === "Orren" ? "orren" : who === "Nim" ? "nim" : "salvia"}.png" alt="${who}"></div><div><p class="dialogue-text">“${d.lines[page]}”</p><span class="dialogue-page">${page + 1} / ${d.lines.length}</span></div></div><div class="panel-footer">${this.button("Encerrar", "back")}${this.button(page < d.lines.length - 1 ? "Ouvir →" : "Até o próximo instante", "dialogueNext", "", "primary")}</div>`,
+        npc.role,
+        `<div class="dialogue-content"><div class="portrait"><img src="assets/portrait-${npc.id}.png" alt="${npc.name}"></div><div><p class="dialogue-text">“${d.lines[page]}”</p><span class="dialogue-page">${page + 1} / ${d.lines.length}</span></div></div><div class="npc-service">${this.button(npc.action, "npcService", npc.id, "primary")}</div><div class="panel-footer">${this.button("Encerrar", "back")}${this.button(page < d.lines.length - 1 ? "Ouvir →" : "Até o próximo instante", "dialogueNext")}</div>`,
         "dialogue",
       );
     };
@@ -452,6 +619,8 @@ export class UI {
       available = BOONS.filter((b) => !run.boons.includes(b.id));
     if (!available.length) {
       run.coins += 30;
+      this.app.world.rewardPending = false;
+      this.app.saveCheckpoint();
       return;
     }
     const choices = [];
@@ -470,6 +639,7 @@ export class UI {
       b = BOONS.find((x) => x.id === id);
     if (!run || !b || run.boons.includes(id)) return;
     run.boons.push(id);
+    this.app.world.rewardPending = false;
     if (b.stat === "hp") {
       this.app.world.health.max += b.value;
       this.app.world.health.heal(b.value);
@@ -544,9 +714,11 @@ export class UI {
     this.modal(
       "Entre dois instantes",
       "TRAVESSIA PAUSADA",
-      `<nav class="pause-nav">${this.button("Retomar a jornada →", "back", "", "primary")}${this.app.run ? this.button("Juramentos & equipamento", "inventory") : ""}${this.button("Controles", "controls")}${this.button("Configurações", "settings")}${this.button("Menu principal", "menu")}</nav><p class="fine-print">O progresso é salvo na entrada de cada câmara. Ao continuar, a câmara atual recomeça com os recursos salvos. Dados guardados neste navegador.</p>`,
+      `<nav class="pause-nav">${this.button("Retomar a jornada →", "back", "", "primary")}${this.button("Inventário · comidas, roupas e recursos", "inventory")}${this.button("Controles", "controls")}${this.button("Configurações", "settings")}${this.button("Menu principal", "menu")}</nav><p class="fine-print">O progresso é salvo na entrada de cada câmara. Ao continuar, a câmara atual recomeça com os recursos salvos. Dados guardados neste navegador.</p>`,
       "pause",
     );
+    if (this.app.run && this.app.world.cleared && !this.app.world.rewardPending)
+      this.overlay.querySelector(".pause-nav")!.insertAdjacentHTML("beforeend", this.button("Voltar ao Farol", "returnToHub"));
   }
   settings(): void {
     this.previous = this.screen === "menu" ? "menu" : "play";
@@ -584,6 +756,9 @@ export class UI {
         ["SHIFT", "Ruptura · onda que desacelera"],
         ["Q", "Aurora · requer 100% de energia"],
         ["E", "Interagir / canalizar"],
+        ["R", "Comer uma provisão da mochila"],
+        ["T", "Beber uma provisão da mochila"],
+        ["I", "Abrir / fechar o inventário completo"],
         ["TAB", "Mapa da região"],
         ["ESC", "Pausar / voltar"],
       ]
@@ -597,24 +772,42 @@ export class UI {
     );
     this.previous = prev === "menu" ? "menu" : "play";
   }
-  inventory(): void {
-    const run = this.app.run!;
-    this.modal(
-      weaponName(this.app.store.data, run.weapon, WEAPONS[run.weapon].name),
-      "EQUIPAMENTO & JURAMENTOS",
-      `<p>${WEAPONS[run.weapon].description}</p><p>Forja +${this.app.store.data.weaponLevels[run.weapon]} · Infusão: ${INFUSIONS.find((i) => i.id === this.app.store.data.infusions[run.weapon])!.name} · ${SKILLS.filter((n) => skillRank(this.app.store.data, n.id) > 0).length} habilidades permanentes aprendidas.</p><div class="inventory-list">${
-        run.boons.length
-          ? run.boons
-              .map((id) => {
-                const b = BOONS.find((x) => x.id === id)!;
-                return `<article style="border-color:${SCHOOL_COLORS[b.school]}"><b>${b.name}</b><small>${b.school}</small><p>${b.description}</p></article>`;
-              })
-              .join("")
-          : "<p>Nenhuma promessa encontrada nesta expedição.</p>"
-      }</div><p class="fine-print">${run.kills} inimigos derrotados · ${run.visited.length} câmaras restauradas</p>`,
-      "map",
-      true,
-    );
+  toggleInventory(): void {
+    if (this.screen === "inventory") this.close();
+    else this.inventory();
+  }
+  inventory(tab: InventoryTab = "provisions", preserve = false): void {
+    if (!["play", "pause", "provisions", "inventory"].includes(this.screen) || this.app.world.health.dead) return;
+    const scroll = preserve ? (this.overlay.querySelector(".panel")?.scrollTop ?? 0) : 0;
+    const focus = preserve ? (document.activeElement as HTMLElement | null)?.dataset : undefined;
+    const s = this.app.store.data, run = this.app.run, n = this.app.world.needs;
+    const outfit = CLOTHING.find((c) => c.id === s.clothing)!;
+    this.inventoryTab = tab;
+    this.activeNpc = null;
+    const tabs: [InventoryTab, string][] = [["provisions", "Comidas e bebidas"], ["resources", "Recursos"], ["clothes", "Vestimentas"], ["equipment", "Equipamento"]];
+    let content = "";
+    if (tab === "provisions") {
+      content = `<div class="needs-summary"><span>Fome <b>${Math.round(n.hunger)}%</b></span><span>Sede <b>${Math.round(n.thirst)}%</b></span><span>Frio <b>${Math.round(n.cold)}%</b></span></div><p class="inventory-note">Quanto menores as barras, melhor. Escolha uma provisão para consumir. O tempo fica pausado neste menu.</p><div class="inventory-grid">${CONSUMABLES.map((i) => {
+        const reason = consumableBlock(s, n, i.id);
+        return `<article class="inventory-item" data-provision="${i.id}"><h3>${this.px(i.icon)} ${i.name}<span class="item-count" aria-label="Quantidade">${s.provisions[i.id]}</span></h3><p>${i.description}</p>${this.button("Consumir", "consume", i.id, "primary", reason)}${reason ? `<small>${reason}</small>` : ""}</article>`;
+      }).join("")}</div>`;
+    } else if (tab === "resources") {
+      const sources: Record<string, string> = { grain: "Câmaras restauradas; mais abundante nos Jardins. Usado por Lume.", herb: "Câmaras restauradas; mais abundante nos Arquivos. Usado por Lume e Caio.", rawWater: "Câmaras restauradas; mais rara nas Forjas. Usada por Caio e Lume.", fiber: "Todas as câmaras restauradas. Usada por Íria.", hide: "Elites, desafios, chefes e algumas câmaras. Usado por Íria." };
+      content = `<p class="inventory-note">Todos os ingredientes e materiais guardados, incluindo os que estão em falta. Os serviços de criação ficam com os moradores do Farol.</p><h3 class="inventory-section">Ingredientes e tecidos</h3><div class="inventory-grid resource-grid">${SURVIVAL_MATERIALS.map((m) => `<article class="inventory-item" data-stock="${m.id}"><h3>${this.px(m.icon)} ${m.name}<span class="item-count">${s.survivalMaterials[m.id]}</span></h3><p>${sources[m.id]}</p></article>`).join("")}</div><h3 class="inventory-section">Materiais da forja</h3><div class="inventory-grid resource-grid">${MATERIALS.map((m) => `<article class="inventory-item" data-stock="${m.id}"><h3>${this.px(m.icon)} ${m.name}<span class="item-count">${s.materials[m.id]}</span></h3><p>${m.source} Usado por Orren.</p></article>`).join("")}</div>`;
+    } else if (tab === "clothes") {
+      content = `<p class="inventory-note">Em uso: <b>${outfit.name}</b> · ${outfit.description} Troque aqui as roupas que já possui; converse com Íria para confeccionar novas peças.</p><div class="inventory-grid">${CLOTHING.map((c) => {
+        const owned = s.wardrobe.includes(c.id), equipped = c.id === s.clothing;
+        return `<article class="inventory-item ${equipped ? "equipped" : ""}" data-outfit="${c.id}"><h3>${this.px("coat")} ${c.name}</h3><p>${c.description}</p><strong>${owned ? "Quantidade: 1" : "Quantidade: 0 · Ainda não confeccionada"}</strong>${this.button(equipped ? "Equipada" : "Vestir", "wear", c.id, equipped ? "" : "primary", !owned ? "Confeccione esta vestimenta com Íria" : equipped ? "Vestimenta já equipada" : "")}</article>`;
+      }).join("")}</div>`;
+    } else {
+      const active = run?.weapon ?? this.app.weapon;
+      const expedition = run ?? s.run;
+      content = `<p class="inventory-note">${SKILLS.filter((node) => skillRank(s, node.id) > 0).length} habilidades permanentes aprendidas. Converse com Orren para forjar, aprimorar ou trocar a arma.</p><div class="inventory-grid">${(Object.keys(WEAPONS) as WeaponId[]).map((id) => `<article class="inventory-item ${id === active ? "equipped" : ""}" data-owned-weapon="${id}"><h3>${this.px(id)} ${weaponName(s, id, WEAPONS[id].name)}</h3><strong>${s.unlocked.includes(id) ? (id === active ? "Em uso · Quantidade: 1" : "Quantidade: 1") : "Quantidade: 0 · Ainda não forjada"}</strong><p>${WEAPONS[id].description}</p><small>Forja +${s.weaponLevels[id]} · Infusão: ${INFUSIONS.find((i) => i.id === s.infusions[id])!.name}</small></article>`).join("")}</div><h3 class="inventory-section">Juramentos ${run ? "da expedição" : expedition ? "da expedição salva" : ""}</h3><div class="inventory-list">${expedition?.boons.length ? expedition.boons.map((id) => { const b = BOONS.find((b) => b.id === id)!; return `<article style="border-color:${SCHOOL_COLORS[b.school]}"><b>${b.name}</b><small>${b.school}</small><p>${b.description}</p></article>`; }).join("") : "<p>Nenhum Juramento guardado nesta expedição.</p>"}</div>`;
+    }
+    this.modal("Inventário de Eira", "MOCHILA & EQUIPAMENTOS", `<div class="inventory-wallet"><span>${this.px("echo")} <b data-wallet="echoes">${s.echoes}</b> Ecos</span><span>${this.px("coin")} <b data-wallet="coins">${run?.coins ?? s.run?.coins ?? 0}</b> Óbolos${!run && s.run ? " da expedição salva" : ""}</span><span>${this.px("coat")} ${outfit.name}</span></div><nav class="inventory-tabs" aria-label="Categorias do inventário">${tabs.map(([id, label]) => this.button(label, "inventoryTab", id, id === tab ? "primary" : "").replace("<button ", `<button aria-pressed="${id === tab}" `)).join("")}</nav><section class="inventory-content" aria-label="${tabs.find(([id]) => id === tab)![1]}">${content}</section><p class="inventory-note inventory-footer">I ou Esc para fechar · Crie itens conversando com os moradores do Farol.</p>`, "inventory", true);
+    this.overlay.querySelector(".panel")!.scrollTop = scroll;
+    if (focus?.action && focus?.value)
+      window.setTimeout(() => this.overlay.querySelector<HTMLButtonElement>(`[data-action="${focus.action}"][data-value="${focus.value}"]`)?.focus({ preventScroll: true }), 20);
   }
   failedObjective(): void {
     this.modal(
@@ -632,6 +825,7 @@ export class UI {
       `<p class="dialogue-text">“Você o partiu, Eira. Mas pode escolher o que nasce das peças.”</p><p>A centelha pode reconstruir o Tear sem sacrifícios, aceitando um amanhã incerto. Ou pode fechar o ciclo e preservar cada lembrança para sempre.</p><div class="event-options">${this.button("Devolver o movimento ao mundo <small>Reconstruir a aurora sem apagar memórias</small>", "ending", "restore")}${this.button("Guardar o último crepúsculo <small>Preservar as lembranças e suspender o tempo</small>", "ending", "preserve")}</div>`,
       "victory",
     );
+    this.overlay.querySelector(".panel")!.insertAdjacentHTML("beforeend", `<div class="panel-footer">${this.button("Voltar ao Farol antes de decidir", "returnToHub")}</div>`);
   }
   death(run: Run): void {
     this.modal(
@@ -688,6 +882,30 @@ export class UI {
     switch (action) {
       case "hub":
         app.hub();
+        break;
+      case "returnToHub":
+        app.returnToHub();
+        break;
+      case "npcService":
+        this.openNpcService(value);
+        break;
+      case "craftProvision":
+        app.craftProvision(value);
+        break;
+      case "wear":
+        app.wear(value as ClothingId);
+        break;
+      case "consume":
+        app.consume(value as ConsumableId);
+        break;
+      case "quickEat":
+        app.consume(app.store.data.provisions.ration > 0 ? "ration" : "stew");
+        break;
+      case "quickDrink":
+        app.consume(app.store.data.provisions.water > 0 ? "water" : "tea");
+        break;
+      case "provisions":
+        this.provisions();
         break;
       case "continue":
         app.continueRun();
@@ -794,6 +1012,10 @@ export class UI {
       case "inventory":
         this.inventory();
         break;
+      case "inventoryTab":
+        if (this.screen === "inventory" && ["provisions", "resources", "clothes", "equipment"].includes(value))
+          this.inventory(value as InventoryTab);
+        break;
       case "dialogueNext":
         this.dialogueNext();
         break;
@@ -802,6 +1024,7 @@ export class UI {
         break;
       case "skipReward":
         if (app.run) app.run.coins += 15;
+        app.world.rewardPending = false;
         app.saveCheckpoint();
         this.close();
         break;

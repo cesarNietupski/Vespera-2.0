@@ -167,7 +167,7 @@ for (const kind of [
         ]);
   await atlas(kind, 56, entries, 16);
 }
-for (const npc of ["salvia", "orren", "nim"]) {
+for (const npc of ["salvia", "orren", "nim", "lume", "caio", "iria"]) {
   const entries = [];
   for (const [state, count] of Object.entries(animation.npc))
     for (let d = 0; d < 8; d++)
@@ -208,6 +208,9 @@ for (const kind of [
   "forge",
   "shelf",
   "astrolabe",
+  "cookpot",
+  "cistern",
+  "loom",
 ]) {
   entries.push([kind, propFrame(kind)]);
   const count = animation.props[kind];
@@ -238,11 +241,18 @@ for (const kind of [
   "book",
   "skull",
   "arrow",
+  "food",
+  "water",
+  "leaf",
+  "thread",
+  "coat",
+  "pot",
+  "cup",
 ])
   await single(`icon-${kind}`, icon(kind), 2);
 await single("logo", logo(), 2);
 // Portraits come from the same original sprites, at a stable native crop.
-for (const name of ["eira", "salvia", "orren", "nim"]) {
+for (const name of ["eira", "salvia", "orren", "nim", "lume", "caio", "iria"]) {
   const source = heroFrame(
     "idle",
     0,

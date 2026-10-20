@@ -17,11 +17,16 @@ export class Vitality {
   tick(dt: number): void {
     this.immune = Math.max(0, this.immune - dt);
   }
-  hit(amount: number, iframes = 0.6): boolean {
-    if (this.dead || this.immune > 0 || !Number.isFinite(amount) || amount <= 0)
+  hit(amount: number, iframes = 0.6, ignoreImmunity = false): boolean {
+    if (
+      this.dead ||
+      (this.immune > 0 && !ignoreImmunity) ||
+      !Number.isFinite(amount) ||
+      amount <= 0
+    )
       return false;
     this.hp = damage(this.hp, amount);
-    this.immune = iframes;
+    if (!ignoreImmunity) this.immune = iframes;
     this.dead = this.hp === 0;
     return true;
   }

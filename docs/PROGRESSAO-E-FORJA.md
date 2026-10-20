@@ -1,6 +1,6 @@
 # Árvore de habilidades e forja
 
-No Farol, abra **Altar da centelha** para a árvore e **Oficina de Orren** para criar equipamentos. As duas telas mantêm pergaminho opaco, molduras em pixels e descrições legíveis de 16 px ou mais.
+No Farol, caminhe até **Sálvia** e pressione **E** para conversar e desenvolver habilidades; converse com **Orren** para criar equipamentos. Não há atalhos remotos: cada operação exige a conversa ativa e proximidade do NPC responsável. As telas mantêm pergaminho opaco, molduras em pixels e descrições legíveis de 16 px ou mais. Comida, bebida e vestimentas são preparadas pelos três novos moradores descritos em `SOBREVIVENCIA-E-MORADORES.md`.
 
 ## Habilidades
 
