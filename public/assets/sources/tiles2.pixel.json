@@ -1,0 +1,23 @@
+{
+  "name": "tiles2",
+  "version": "2.0.0",
+  "nativeSize": 48,
+  "outputScale": 2,
+  "format": "RGBA8888",
+  "method": "Original pixel clusters, articulated joints and authored action keyframes; nearest-neighbour upscale.",
+  "generator": "scripts/art/pixel-world.mjs",
+  "frames": [
+    "floor/0",
+    "floor/1",
+    "floor/2",
+    "floor/3",
+    "floor/4",
+    "floor/5",
+    "floor/6",
+    "floor/7",
+    "floor/8",
+    "floor/9",
+    "floor/10",
+    "floor/11"
+  ]
+}

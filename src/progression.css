@@ -1,0 +1,430 @@
+/* Permanent progression uses the same original wood and parchment frames. */
+.resource-bar,
+.skill-wallet {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  padding: 13px 16px;
+  margin: 18px 0;
+  background: #e5cca0;
+  border: 2px solid #a47848;
+  color: #453128;
+  font-size: 16px;
+  line-height: 1.5;
+}
+.resource-bar > span,
+.skill-wallet {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.resource-bar .px-icon,
+.skill-wallet .px-icon {
+  width: 25px;
+  height: 25px;
+}
+.skill-wallet > span {
+  margin-left: auto;
+  font-size: 15px;
+}
+.progression-tabs {
+  display: flex;
+  gap: 12px;
+  margin: 20px 0;
+  flex-wrap: wrap;
+}
+.progression-tabs > button {
+  flex: 1;
+  min-width: 180px;
+  font-size: 17px;
+  padding: 9px 12px;
+}
+.progression-tabs .px-icon {
+  width: 24px;
+  height: 24px;
+  margin-right: 5px;
+}
+button:disabled,
+button:disabled:hover {
+  cursor: not-allowed;
+  opacity: 1;
+  color: #e6cfad;
+  filter: saturate(0.35);
+  transform: none;
+  box-shadow: 0 2px #372b2a;
+}
+.forge-cards {
+  align-items: stretch;
+  gap: 18px;
+}
+.forge-card {
+  display: flex;
+  flex-direction: column;
+  padding: 18px;
+}
+.forge-card .equipment-status {
+  font-size: 12px;
+  line-height: 1.5;
+  font-weight: 750;
+  color: #60402d;
+  letter-spacing: 0.4px;
+}
+.forge-card .weapon-glyph {
+  height: 78px;
+  margin: 10px 0;
+}
+.forge-card .weapon-glyph .px-icon {
+  width: 68px;
+  height: 68px;
+}
+.forge-card h3 {
+  font-size: 23px;
+}
+.forge-card p {
+  min-height: 80px;
+  margin-bottom: 12px;
+}
+.forge-card dl {
+  margin: 0 0 15px;
+}
+.forge-card dd {
+  max-width: none;
+  text-align: right;
+  white-space: nowrap;
+}
+.forge-card > button {
+  width: 100%;
+  margin-top: auto;
+  font-size: 16px;
+}
+.forge-card .recipe-reason {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #773c2c;
+  margin: 10px 0;
+  min-height: 42px;
+}
+.forge-card .recipe-reason.ready {
+  color: #38573e;
+}
+.recipe-cost {
+  border-top: 1px solid #9b7547;
+  padding-top: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #4f392c;
+}
+.recipe-cost > span {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+.recipe-cost .px-icon {
+  width: 22px;
+  height: 22px;
+}
+.recipe-cost .missing {
+  color: #862f29;
+  font-weight: 700;
+}
+.infusion-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.infusion-options > button {
+  flex: 1;
+  font-size: 16px;
+  min-width: 145px;
+}
+.infusion-options .px-icon {
+  width: 23px;
+  height: 23px;
+}
+.forge-hint {
+  background: #e2c798;
+  border-left: 4px solid #906038;
+  padding: 10px 15px;
+  font-size: 16px;
+}
+.material-guide {
+  border-top: 2px solid #a27a4c;
+  padding-top: 17px;
+  margin: 20px 0 5px;
+}
+.material-guide p {
+  font-size: 16px;
+}
+.material-guide .px-icon {
+  width: 22px;
+  height: 22px;
+}
+.skill-tree-intro {
+  display: flex;
+  align-items: center;
+  gap: 25px;
+}
+.skill-tree-intro p {
+  font-size: 16px;
+  flex: 1;
+  margin: 0;
+}
+.skill-tree-intro > strong {
+  font-size: 16px;
+  max-width: 170px;
+  text-align: right;
+  color: #63412b;
+}
+.skill-branch-heading {
+  margin: 24px 0;
+  text-align: center;
+}
+.skill-branch-heading h3 {
+  color: #523626;
+  font-size: 25px;
+}
+.skill-branch-heading p {
+  margin: 4px 0;
+  font-size: 16px;
+}
+.skill-tree {
+  padding: 0 15px 10px;
+  max-width: 900px;
+  margin: auto;
+}
+.skill-tier {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 36px;
+}
+.skill-tier + .skill-tier {
+  margin-top: 36px;
+}
+.skill-tier.single {
+  grid-template-columns: 1fr;
+}
+.skill-tier.single .skill-node {
+  width: min(440px, 100%);
+  justify-self: center;
+}
+.skill-node {
+  position: relative;
+  min-width: 0;
+  padding: 19px;
+  background: #dec294;
+  border: 8px solid transparent;
+  border-image: url("/assets/ui-panel.png") 12 stretch;
+  box-shadow: 0 3px #75533760;
+  display: flex;
+  flex-direction: column;
+}
+.skill-node.learned {
+  border-image-source: url("/assets/ui-primary.png");
+  background: #e9c993;
+}
+.skill-node.mastered {
+  background: #eed7a6;
+  box-shadow:
+    0 3px #75533760,
+    inset 0 0 0 2px #9d693a;
+}
+.skill-node-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 9px;
+}
+.skill-node-head > .px-icon {
+  width: 36px;
+  height: 36px;
+}
+.skill-node-head > span {
+  display: flex;
+  justify-content: space-between;
+  flex: 1;
+  gap: 12px;
+  font-size: 12px;
+  font-weight: 750;
+  color: #65472f;
+}
+.skill-node-head b {
+  font-size: 16px;
+}
+.skill-node h3 {
+  font-size: 21px;
+  line-height: 1.3;
+  margin: 0 0 9px;
+  color: #422e29;
+}
+.skill-node p {
+  font-size: 16px;
+  line-height: 1.55;
+  margin: 0 0 14px;
+  min-height: 48px;
+  color: #49352d;
+}
+.skill-ranks {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+.skill-ranks i {
+  height: 7px;
+  flex: 1;
+  background: #b39670;
+  border: 1px solid #765235;
+}
+.skill-ranks i.filled {
+  background: #9a6637;
+  border-color: #6b452d;
+  box-shadow: inset 0 2px #e9b66d;
+}
+.skill-requirement {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #60432d;
+  display: block;
+  margin: 0 0 12px;
+  min-height: 21px;
+}
+.skill-node > button {
+  font-size: 16px;
+  padding: 7px;
+  margin-top: auto;
+  width: 100%;
+}
+.skill-block {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #7b3c2c;
+  margin-top: 10px;
+}
+.skill-tier:not(:last-child) .skill-node:after {
+  content: "";
+  position: absolute;
+  width: 3px;
+  height: 27px;
+  background: #9b7145;
+  bottom: -29px;
+  left: calc(50% - 1px);
+}
+.skill-tier:not(:first-child) .skill-node:before {
+  content: "";
+  position: absolute;
+  width: 3px;
+  height: 17px;
+  background: #9b7145;
+  top: -25px;
+  left: calc(50% - 1px);
+}
+.skill-tier:not(:first-child):before {
+  content: "";
+  position: absolute;
+  left: calc(25% - 9px);
+  right: calc(25% - 9px);
+  height: 2px;
+  background: #9b7145;
+  top: -18px;
+}
+.skill-tier.fork:nth-child(3):before {
+  display: none;
+}
+.skill-respec {
+  margin: 30px 0 0;
+  padding: 20px 0 0;
+  border-top: 2px solid #a87e4f;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  justify-content: space-between;
+}
+.skill-respec p {
+  font-size: 16px;
+  max-width: 460px;
+  margin: 0;
+}
+.skill-respec button {
+  font-size: 16px;
+}
+#ui:has(.modal-backdrop) #toast {
+  top: 8px;
+  bottom: auto;
+  border-width: 6px;
+  padding: 5px 12px;
+  font-size: 15px;
+  max-width: min(760px, 92vw);
+}
+@media (max-width: 780px) {
+  .progression-tabs > button {
+    min-width: 120px;
+    font-size: 16px;
+  }
+  .resource-bar {
+    gap: 8px 13px;
+    font-size: 14px;
+  }
+  .forge-card p {
+    min-height: 0;
+  }
+  .skill-tree-intro {
+    display: block;
+  }
+  .skill-tree-intro > strong {
+    display: block;
+    max-width: none;
+    text-align: left;
+    margin-top: 10px;
+  }
+  .skill-wallet > span {
+    margin-left: 0;
+  }
+  .skill-tree {
+    padding: 0;
+  }
+  .skill-tier {
+    gap: 16px;
+  }
+  .skill-node {
+    padding: 13px;
+    border-width: 6px;
+  }
+  .skill-node h3 {
+    font-size: 19px;
+  }
+  .skill-node p {
+    font-size: 16px;
+  }
+  .skill-node-head > span {
+    font-size: 10px;
+  }
+  .skill-respec {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+@media (max-width: 520px) {
+  .skill-tier {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .skill-tier:before,
+  .skill-node:before,
+  .skill-node:after {
+    display: none;
+  }
+  .skill-tier + .skill-tier {
+    margin-top: 24px;
+  }
+  .skill-node,
+  .skill-tier.single .skill-node {
+    width: 100%;
+  }
+  .progression-tabs .px-icon {
+    display: none;
+  }
+}
