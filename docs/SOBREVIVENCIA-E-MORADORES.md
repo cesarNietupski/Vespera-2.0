@@ -13,13 +13,13 @@ O painel de atalhos do Farol foi retirado. Caminhe até um morador e pressione *
 | Caio | Água potável e chá |
 | Íria | Confecção e troca de vestimentas |
 
-Os seis possuem sprites e retratos originais em pixel art. Lume tem uma cozinha, Caio uma cisterna e Íria um tear. Os caminhos do Farol reservam acesso aos seis moradores. Para iniciar a expedição, aproxime-se do portal e pressione **E**.
+Os seis possuem sprites e retratos originais em pixel art. Cada morador tem uma casa própria, com decoração de sua profissão. Lume tem uma cozinha, Caio uma cisterna e Íria um tear. As ruas ligam as casas à praça e ao portão leste; Tab abre o mapa e permite caminhar até um destino. Consulte [VILA-E-PORTOES.md](VILA-E-PORTOES.md). Para iniciar a expedição, aproxime-se do portão e pressione **E**.
 
 ## Retornar entre câmaras
 
-Ao concluir uma câmara e resolver sua recompensa, aparece **Voltar ao Farol**. A opção também está na pausa de uma câmara restaurada. O retorno preserva a câmara atual, vida, carga, óbolos, Juramentos e recursos; não conta como morte e não encerra a expedição. No Farol, converse com os moradores para se abastecer. Depois, use **E** no portal e escolha **Continuar expedição salva**.
+Ao concluir uma câmara e resolver sua recompensa, aparece **Voltar ao Farol**. A opção também está na pausa de uma câmara restaurada. O retorno preserva a câmara atual, vida, carga, óbolos, Juramentos e recursos; não conta como morte e não encerra a expedição. No Farol, converse com os moradores para se abastecer. Depois, use **E** no portão e escolha **Continuar expedição salva**.
 
-A câmara restaurada permanece concluída, sem inimigos nem novo saque. Atravesse seu portal para seguir à próxima câmara ou escolher um desvio. Chefes também permitem retornar; depois do último, é possível voltar ao Farol antes de escolher o desfecho e retomar a decisão pelo portal. Partir em uma nova expedição substitui a anterior, conforme o aviso da tela.
+A câmara restaurada permanece concluída, sem inimigos nem novo saque. Encontre a chave da fase e abra seu portão para seguir à próxima câmara ou escolher um desvio. Chefes também permitem retornar; depois do último, é possível voltar ao Farol antes de escolher o desfecho e retomar a decisão pelo portão. Partir em uma nova expedição substitui a anterior, conforme o aviso da tela.
 
 ## Necessidades
 
@@ -35,7 +35,7 @@ Fome, sede e frio vão de **0 a 100**. Quanto menor a barra, melhor. O tempo só
 
 A fome aumenta 0,09 por segundo ativo. A sede aumenta 0,14, ou 0,19 nas Forjas. Sem proteção, o frio aumenta 0,035 nos Jardins, 0,13 no Arquivo e 0,21 na Cúpula; as Forjas reduzem o frio. Vestimentas reduzem o acúmulo, enquanto tochas e forjas próximas aquecem. O Farol aquece Eira sem aumentar fome ou sede.
 
-O dano extremo de sobrevivência atravessa a imunidade de combate sem consumir sua duração. A morte segue o ciclo normal de retorno; o Farol estabiliza fome e sede em no máximo 40 e remove o frio. Mantimentos, matérias-primas e vestimentas permanecem guardados.
+O dano extremo de sobrevivência atravessa a imunidade de combate sem consumir sua duração. A morte segue o ciclo normal de retorno; o Farol estabiliza fome e sede em no máximo 40 e remove o frio. O estoque anterior e as vestimentas permanecem; o saque novo da fase ainda em risco sofre perda parcial de 30%, conforme EXPLORACAO-E-COLETA.md.
 
 ## Preparar e consumir
 
@@ -60,6 +60,6 @@ O kit inicial oferece 2 rações, 2 águas, 6 Grãos, 4 Ervas, 8 Águas brutas, 
 
 Restaurar uma câmara concede ingredientes automaticamente, junto dos materiais da forja. Jardins concedem mais Grãos, Arquivos mais Ervas e Forjas menos Água bruta. Toda câmara concede Fibras; elites, desafios e chefes concedem mais Couro. O registro de câmaras restauradas impede saques repetidos ao continuar o save.
 
-Necessidades são preservadas entre câmaras, consumos e continuação, com checkpoint automático a cada cinco segundos ativos. Uma câmara não concluída ainda reinicia seus encontros ao recarregar, conforme o sistema existente.
+Necessidades são preservadas entre câmaras, consumos e continuação, com checkpoint automático a cada cinco segundos ativos. A continuação também conserva posição, inimigos e objetivos da câmara incompleta. Há seis campanhas independentes e exportação de backups; consulte CAMPANHAS-E-VOZES.md.
 
 Regras em `src/game/survival.ts`; moradores em `src/data/npcs.ts`; integração em `world.ts`, `main.ts`, `ui.ts` e `survival.css`. A economia e os ritmos iniciais foram verificados funcionalmente, sem alegar playtest prolongado de dificuldade.

@@ -1,0 +1,13 @@
+.village-directory { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:18px; }
+.village-directory article { border:2px solid #947447; background:#e0c99b; padding:14px; }
+.village-directory b { display:block; font-size:17px; }
+.village-directory p { margin:8px 0; font-size:16px; }
+.village-directory button { width:100%; }
+.village-map-house rect { fill:#b68960; stroke:#f6dfaa; stroke-width:2; }
+.village-map .village-map-house text { fill:#251d19; font-size:11px; }
+.village-map .village-gate-map { fill:#ffe3a2; font-size:10px; }
+.gate-status { position:absolute; left:25px; top:530px; width:245px; padding:10px 12px; color:#ffe0a2; border:2px solid #aa844d; background:#282f35ef; font-size:14px; line-height:1.5; }
+.key-clue { border:2px solid #a37b3e; padding:10px 14px; background:#e3ce9f; color:#513d25; font-size:16px; }
+.inventory-key { display:flex; flex-wrap:wrap; gap:12px; justify-content:space-between; border:2px solid #a57e40; background:#e4d2aa; padding:12px 16px; margin-bottom:14px; font-size:16px; }
+.stage-map .map-key circle { fill:#ffdc78; stroke:#57441e; stroke-width:2; }
+@media(max-width:900px) { .village-directory { grid-template-columns:repeat(2,1fr); } .gate-status { left:12px; top:500px; width:210px; font-size:13px; } }

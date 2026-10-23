@@ -45,8 +45,8 @@ test("seis moradores e acesso à forja e árvore exigem conversa e proximidade",
   await expect(
     page.getByRole("heading", { name: "Metal que ainda se lembra" }),
   ).toBeVisible();
-  await page.evaluate(() => (window as any).vesperaTest.portal());
-  await page.locator('.forge-card[data-weapon="hammer"] button').click();
+  await page.evaluate(() => ((window as any).vesperaTest.unlockGate(), (window as any).vesperaTest.portal()));
+  await page.locator('.forge-card[data-weapon="hammer"] [data-action="craft"]').click();
   expect((await stored(page)).unlocked).not.toContain("hammer");
   await page.keyboard.press("Escape");
   await openNpc(page, "salvia");
@@ -58,11 +58,9 @@ test("andar até Lume, falar e preparar comida; Caio purifica e Íria confeccion
 }) => {
   test.setTimeout(90000);
   await boot(page);
-  await page.keyboard.down("d");
-  await page.keyboard.down("s");
-  await expect(page.locator("#interaction")).toContainText("LUME");
-  await page.keyboard.up("d");
-  await page.keyboard.up("s");
+  await page.keyboard.press("Tab");
+  await page.locator('[data-action="villageGuide"][data-value="lume"]').click();
+  await expect(page.locator("#interaction")).toContainText("LUME", { timeout: 15000 });
   await page.keyboard.press("e");
   await page.locator('[data-action="npcService"][data-value="lume"]').click();
   const before = (await stored(page)).provisions.ration;

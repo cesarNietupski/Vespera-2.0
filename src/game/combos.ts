@@ -1,4 +1,5 @@
 import type { WeaponId } from "../types";
+import { WEAPONS, WEAPON_IDS } from "./weapons";
 import { HERO_FRAMES } from "./animation";
 export interface ComboMove {
   name: string;
@@ -33,7 +34,7 @@ const move = (
   arrows,
   pierce,
 });
-export const COMBOS: Record<WeaponId, readonly ComboMove[]> = {
+const FAMILIES: Record<"blade" | "hammer" | "bow", readonly ComboMove[]> = {
   blade: [
     move(1, "Corte da centelha", 1, 1),
     move(2, "Fio de retorno", 0.94, 1.05),
@@ -59,6 +60,7 @@ export const COMBOS: Record<WeaponId, readonly ComboMove[]> = {
     move(6, "Memória perfurante", 1.4, 1.7, 1, 1.2, [0], 2),
   ],
 };
+export const COMBOS = Object.fromEntries(WEAPON_IDS.map(id => [id, FAMILIES[WEAPONS[id].family].map(m => ({ ...m, arc: id === "spear" || id === "rapier" ? m.arc * .55 : id === "scythe" ? m.arc * 1.5 : m.arc }))])) as unknown as Record<WeaponId, readonly ComboMove[]>;
 export function comboMove(weapon: WeaponId, step: number): ComboMove {
   return COMBOS[weapon][
     (((step - 1) % COMBOS[weapon].length) + COMBOS[weapon].length) %

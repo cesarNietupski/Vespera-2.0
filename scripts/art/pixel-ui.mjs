@@ -111,6 +111,68 @@ export function icon(name) {
     c.line(4, 5, 7, 4, "#e48c73");
     c.line(4, 6, 4, 9, "#eaa58a");
     c.line(11, 13, 14, 10, "#783445");
+  } else if (name === "dagger") {
+    c.line(4,17,9,11,G[3],3);
+    c.poly([[7,11],[13,5],[17,3],[15,8],[10,14]],"#c491a3",INK);
+    c.line(9,11,15,5,"#f7d8c9");
+    c.line(5,11,10,16,g,2);
+  } else if (name === "spear") {
+    c.line(3,17,14,5,INK,3);
+    c.line(3,17,14,5,G[3]);
+    c.poly([[10,6],[17,2],[15,9],[13,7]],s,INK);
+    c.line(13,6,16,3,h);
+    c.line(10,9,13,11,g,2);
+  } else if (name === "greatsword") {
+    c.line(4,17,8,13,G[3],3);
+    c.poly([[6,11],[12,3],[17,2],[17,7],[10,15]],"#8a9cac",INK);
+    c.poly([[8,11],[13,4],[16,3],[9,13]],s);
+    c.line(10,11,15,5,h);
+    c.line(4,10,11,17,g,2);
+  } else if (name === "axe") {
+    c.line(4,17,13,4,INK,4);
+    c.line(4,17,13,4,G[3],2);
+    c.poly([[7,4],[13,2],[18,6],[17,11],[13,12],[12,8],[9,8]],"#82999e",INK);
+    c.line(15,3,17,6,s,2);
+    c.line(17,6,16,10,s,2);
+    c.line(9,5,14,9,g,2);
+  } else if (name === "scythe") {
+    c.line(4,17,12,3,INK,3);
+    c.line(4,17,12,3,"#a68097");
+    c.poly([[7,4],[13,2],[18,5],[18,10],[15,7],[11,5],[7,6]],"#879ab6",INK);
+    c.line(12,3,16,5,"#ddd9ec");
+    c.line(16,5,18,8,"#ddd9ec");
+  } else if (name === "rapier") {
+    c.line(4,17,16,3,INK,3);
+    c.line(4,17,16,3,"#e4e9da");
+    c.ring(7,13,3,3,g,0,1);
+    c.line(3,17,6,14,G[3],2);
+    c.line(3,14,5,11,g);
+  } else if (name === "crossbow") {
+    c.line(4,17,14,6,INK,4);
+    c.line(4,17,14,6,G[3],2);
+    c.line(8,3,16,7,s,3);
+    c.line(16,7,17,13,s,3);
+    c.line(8,3,7,13,h);
+    c.line(7,13,17,13,h);
+    c.line(5,15,16,4,m);
+  } else if (name === "staff") {
+    c.line(4,17,13,6,INK,3);
+    c.line(4,17,13,6,"#b18ea4");
+    c.ring(13,5,4,4,g,0,1);
+    c.gem(13,5,3,"#a28dde","#eadcff");
+    c.line(5,14,7,15,g,2);
+    c.pixel(7,2,"#b8a1dd");
+  } else if (name === "pistol") {
+    c.poly([[3,6],[16,4],[18,6],[17,9],[9,10],[7,17],[3,16],[5,10],[3,9]],"#536d7d",INK);
+    c.line(4,6,16,5,s,2);
+    c.line(12,7,17,6,g,2);
+    c.line(5,12,4,16,G[3],2);
+    c.line(8,11,11,11,G[2]);
+  } else if (name === "chakram") {
+    c.ring(10,10,7,7,INK,0,3);
+    c.ring(10,10,6,6,g,0,2);
+    c.ring(10,10,4,4,s,0,1);
+    c.pixel(5,5,h);c.pixel(15,5,h);c.pixel(15,15,h);c.pixel(5,15,h);
   } else if (name === "blade") {
     c.line(4, 17, 15, 3, INK, 4);
     c.poly(

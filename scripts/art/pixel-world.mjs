@@ -211,6 +211,46 @@ export function tileFrame(biome, n) {
   }
   return c;
 }
+export function villageGroundFrame(kind) {
+  const c = new PixelCanvas(48), grass = kind === "village-grass";
+  const r = seeded(kind);
+  // Same 48px isometric footprint and 29.5px support as the existing terrain.
+  c.poly([[0,29],[24,17],[47,29],[47,33],[24,45],[0,33]],grass?"#395537":"#927e5b");
+  c.poly([[0,29],[24,41],[24,45],[0,33]],grass?"#3f5b39":"#a18c65");
+  c.poly([[24,41],[47,29],[47,33],[24,45]],grass?"#344f34":"#8c7858");
+  c.poly([[0,29],[24,17],[47,29],[24,41]],grass?"#4c6b44":"#bda87f");
+  if (grass) {
+    // Tufts and clustered blades replace tile seams; adjoining fields read as grass.
+    for(let y=18;y<=40;y++)for(let x=0;x<48;x++) {
+      if(Math.abs(x-23.5)/23.5+Math.abs(y-29)/12>.94)continue;
+      const noise=r();
+      if(noise<.13)c.pixel(x,y,"#405d3a");
+      else if(noise>.83)c.pixel(x,y,"#5c7c4e");
+    }
+    for(let i=0;i<24;i++) {
+      const x=2+Math.floor(r()*44),y=20+Math.floor(r()*19);
+      if(Math.abs(x-23.5)/23.5+Math.abs(y-29)/12>.8)continue;
+      c.line(x,y,x-1,y-2,"#78915c");
+      c.pixel(x+1,y-1,"#63834f");
+      if(i%7===0)c.pixel(x-1,y,"#91a76a");
+    }
+    // A soft irregular edge hides the repeated masonry silhouette.
+    for(const[x,y]of[[5,27],[10,24],[19,20],[32,22],[39,26],[43,28],[13,35],[31,36]]){
+      c.pixel(x,y,"#5a794b");c.pixel(x+1,y-1,"#6b8754");
+    }
+  } else {
+    const P=(u,v)=>[23.5+(u-v)*5.875,17+(u+v)*3];
+    const stone=["#bda87f","#c7b38c","#b6a079","#cdb991"];
+    for(let u=0;u<4;u++)for(let v=0;v<4;v++) {
+      c.poly([P(u,v),P(u+1,v),P(u+1,v+1),P(u,v+1)],stone[(u*3+v)%stone.length],"#8e7c5d");
+      const p=P(u+.35,v+.4);c.pixel(p[0],p[1],"#dfcba5");
+      const q=P(u+.65,v+.7);if((u+v)%3===0)c.pixel(q[0],q[1],"#a18b65");
+    }
+    c.line(1,29,24,18,"#e0cca5");c.line(24,18,46,29,"#cfbb94");
+    c.line(1,33,24,44,"#877453");c.line(25,44,46,33,"#796b50");
+  }
+  return c;
+}
 export function propFrame(kind, f = 0, count = 1) {
   const c = new PixelCanvas(96),
     r = seeded(kind),
@@ -649,43 +689,90 @@ export function propFrame(kind, f = 0, count = 1) {
       );
       c.pixel(46, top - 6, MAGIC[2]);
     }
+  } else if (kind === "gate-closed" || kind === "gate-open" || kind.startsWith("gate-open-")) {
+    const opening=kind==="gate-closed"?0:kind==="gate-open"?1:Math.max(0,Math.min(1,Number(kind.split("-").at(-1))/7));
+    poly([[15,85],[47,77],[82,85],[49,94]],STONE[1]);
+    poly([[17,84],[47,79],[79,84],[48,90]],STONE[3]);
+    poly([[28,84],[28,49],[34,34],[48,21],[62,35],[68,49],[68,84]],"#12222c");
+    const width=20*Math.cos(opening*Math.PI*.62),swing=8*Math.sin(opening*Math.PI*.62);
+    for(const side of [-1,1]) {
+      const hinge=side===-1?28:68,sign=-side;
+      const q=(along,y)=>[hinge+sign*width*along,y+swing*along];
+      poly([q(0,44),q(.35,35),q(1,24),q(1,84),q(0,83)],side===-1?GOLD[2]:GOLD[1]);
+      for(let i=1;i<5;i++)line(q(i/5,44-i*4),q(i/5,83),GOLD[0]);
+      for(const y of [51,72]) {
+        line(q(.04,y),q(.96,y),STONE[0],4);
+        line(q(.04,y-1),q(.96,y-1),STONE[2],2);
+        for(const a of [.16,.8]){const p=q(a,y);c.pixel(...p,STONE[4]);}
+      }
+      line(q(.08,79),q(.92,48),STONE[1],2);
+      const handle=q(.85,62);c.ring(...handle,2,3,GOLD[3],0,1);
+      if(opening<.3){const p=q(.97,61);c.rect(p[0]-1,p[1]-3,3,7,STONE[2]);}
+    }
+    poly([[17,86],[16,49],[22,32],[33,18],[48,7],[63,18],[75,33],[81,51],[79,87],[65,87],[67,51],[61,37],[54,28],[48,22],[40,29],[33,40],[29,52],[31,86]],STONE[2]);
+    for(let i=0;i<5;i++) {
+      const y=49+i*7;
+      c.rect(18,y,11,6,i%2?STONE[2]:STONE[3]);line([18,y],[28,y],STONE[4]);
+      line([17,y+6],[30,y+6],STONE[0]);
+      c.rect(68,y+1,10,6,i%2?STONE[1]:STONE[2]);line([68,y+1],[77,y+1],STONE[3]);
+      line([67,y+7],[78,y+7],STONE[0]);
+    }
+    for(const[a,b]of[[[19,43],[31,47]],[[23,31],[35,37]],[[31,20],[41,29]],[[41,12],[45,24]],[[54,12],[51,24]],[[64,20],[56,30]],[[74,34],[62,40]]]) {
+      line(a,b,STONE[0],2);line([a[0],a[1]-1],[b[0],b[1]-1],STONE[3]);
+    }
+    line([18,46],[25,31],STONE[4]);line([25,31],[35,19],STONE[4]);line([35,19],[48,9],STONE[3]);
+    poly([[43,10],[48,7],[53,11],[51,24],[46,26]],STONE[3]);line([45,12],[47,22],STONE[4]);
+    c.gem(48,17,2,GOLD[4]);
+    for(const[x,y]of[[19,61],[21,74],[29,37],[36,22],[70,68]]){c.rect(x,y,2,3,"#708268");c.pixel(x+2,y+2,"#9ba58a");}
+  } else if (kind === "gate-key") {
+    c.ellipse(48,82,16,4,"#d4a96225");
+    c.ring(40,64,5,5,GOLD[1],0,3);c.ring(40,64,4,4,GOLD[4],0,1);
+    line([44,68],[59,81],GOLD[1],4);line([44,67],[59,80],GOLD[3],2);
+    line([54,76],[58,72],GOLD[3],2);line([59,80],[63,76],GOLD[4],2);
+    c.pixel(37,61,GOLD[5]);c.pixel(58,64,GOLD[4]);c.pixel(31,74,GOLD[3]);
+  } else if (kind === "key-cache") {
+    poly([[24,82],[24,38],[47,29],[72,39],[72,82],[48,91]],STONE[1]);
+    poly([[25,39],[48,47],[48,89],[25,81]],STONE[2]);
+    poly([[25,38],[47,30],[71,39],[48,46]],STONE[3]);
+    for(let y=49;y<82;y+=10){line([25,y],[47,y+6],STONE[0],2);line([49,y+6],[71,y],STONE[0],2);}
+    poly([[37,50],[53,47],[60,56],[57,72],[42,76],[34,66]],"#17232c");
+    line([44,43],[40,51],STONE[4]);line([40,51],[43,60],STONE[0],2);line([43,60],[37,69],STONE[0],2);
+    poly([[38,52],[48,48],[57,55],[52,62],[42,61]],STONE[3]);
+    c.ring(47,66,3,3,GOLD[3],0,1);line([49,68],[55,73],GOLD[3],2);c.pixel(54,71,GOLD[5]);
+    c.rect(28,78,3,2,"#71846a");
   } else if (kind === "portal") {
-    // Carved voussoirs with a stepped gothic arch and animated energy threads.
+    // Thick masonry jambs, individual voussoirs and a recessed energy opening.
+    poly([[15, 85], [47, 77], [82, 85], [49, 94]], STONE[1]);
+    poly([[17, 84], [47, 79], [79, 84], [48, 90]], STONE[3]);
+    poly([[29, 84], [28, 49], [34, 34], [48, 20], [62, 35], [68, 49], [67, 84]], "#122c3b90");
     const arch = [
-      [21, 87],
-      [18, 65],
-      [20, 44],
-      [27, 28],
-      [37, 16],
-      [48, 9],
-      [60, 17],
-      [70, 30],
-      [76, 48],
-      [77, 68],
-      [74, 87],
-      [66, 86],
-      [68, 66],
-      [67, 48],
-      [62, 33],
-      [55, 23],
-      [48, 17],
-      [40, 24],
-      [32, 35],
-      [27, 48],
-      [26, 67],
-      [29, 86],
+      [17, 86], [16, 49], [22, 32], [33, 18], [48, 7],
+      [63, 18], [75, 33], [81, 51], [79, 87], [65, 87],
+      [67, 51], [61, 37], [54, 28], [48, 22], [40, 29],
+      [33, 40], [29, 52], [31, 86],
     ];
     poly(arch, STONE[2]);
-    for (let i = 0; i < 7; i++) {
-      const y = 31 + i * 8;
-      line([20, y], [27, y + 2], STONE[4]);
-      line([68, y + 1], [76, y], STONE[0]);
+    poly([[72, 35], [81, 50], [79, 87], [75, 88], [76, 52]], STONE[1]);
+    for (let i = 0; i < 5; i++) {
+      const y = 49 + i * 7;
+      c.rect(18, y, 11, 6, i % 2 ? STONE[2] : STONE[3]);
+      line([18, y], [28, y], STONE[4]);
+      line([17, y + 6], [30, y + 6], STONE[0]);
+      c.rect(68, y + 1, 10, 6, i % 2 ? STONE[1] : STONE[2]);
+      line([68, y + 1], [77, y + 1], STONE[3]);
+      line([67, y + 7], [78, y + 7], STONE[0]);
     }
-    line([26, 83], [24, 55], GOLD[3]);
-    line([24, 55], [31, 32], GOLD[3]);
-    line([31, 32], [48, 14], GOLD[4]);
-    line([48, 14], [65, 33], GOLD[2]);
-    line([65, 33], [71, 56], GOLD[2]);
+    const joints = [[[19, 43], [31, 47]], [[23, 31], [35, 37]], [[31, 20], [41, 29]], [[41, 12], [45, 24]], [[54, 12], [51, 24]], [[64, 20], [56, 30]], [[74, 34], [62, 40]]];
+    for (const [a, b] of joints) { line(a, b, STONE[0], 2); line([a[0], a[1] - 1], [b[0], b[1] - 1], STONE[3]); }
+    line([18, 46], [25, 31], STONE[4]);
+    line([25, 31], [35, 19], STONE[4]);
+    line([35, 19], [48, 9], STONE[3]);
+    poly([[43, 10], [48, 7], [53, 11], [51, 24], [46, 26]], STONE[3]);
+    line([45, 12], [47, 22], STONE[4]);
+    for (const [x, y] of [[19, 61], [21, 74], [29, 37], [36, 22], [70, 68]]) {
+      c.rect(x, y, 2, 3, "#708268");
+      c.pixel(x + 2, y + 2, "#9ba58a");
+    }
     for (let y = 30; y < 84; y++)
       for (let x = 30; x < 68; x++) {
         const nx = (x - 48) / 19,
@@ -700,8 +787,8 @@ export function propFrame(kind, f = 0, count = 1) {
       c.ring(xx, yy, 7, 11, "#79bda786", a);
       c.pixel(xx, yy - 10, MAGIC[4]);
     }
-    c.gem(48, 30, 4, GOLD[4]);
-    c.ring(48, 86, 21, 5, MAGIC[2]);
+    c.gem(48, 17, 2, MAGIC[3]);
+    c.ring(48, 85, 17, 4, MAGIC[2]);
   } else if (kind === "gear" || kind === "astrolabe") {
     poly(
       [
@@ -867,6 +954,167 @@ export function propFrame(kind, f = 0, count = 1) {
       }
     }
     c.gem(48, 15, 3, "#9ab8c1");
+  } else if (kind === "chest" || kind === "chest-open" || kind.startsWith("chest-open-")) {
+    const opening = kind === "chest" ? 0 : kind === "chest-open" ? 1 : Math.min(1, Math.max(0, Number(kind.split("-").at(-1)) / 7));
+    const open = opening > 0;
+    poly([[23, 66], [49, 58], [75, 66], [74, 84], [48, 91], [23, 83]], GOLD[1]);
+    poly([[23, 66], [48, 74], [48, 91], [23, 83]], GOLD[2]);
+    poly([[48, 74], [75, 66], [74, 84], [48, 91]], GOLD[0]);
+    for (let x = 28; x <= 43; x += 6) line([x, 69], [x, 83], GOLD[1]);
+    for (let x = 54; x <= 71; x += 6) line([x, 75 - (x - 48) / 3], [x, 87 - (x - 48) / 4], GOLD[1]);
+    if (open) {
+      const lift = opening * 21;
+      // The rear hinge stays fixed while the lid rises and its inside becomes visible.
+      poly([[24, 65], [26, 52 - lift], [48, 44 - lift], [74, 52 - lift], [74, 65], [49, 58]], GOLD[2]);
+      poly([[28, 61], [30, 54 - lift], [49, 49 - lift], [69, 54 - lift], [70, 61], [49, 55]], GOLD[0]);
+      line([27, 52 - lift], [48, 45 - lift], GOLD[4], 2);
+      line([48, 45 - lift], [73, 53 - lift], GOLD[3], 2);
+      for(const x of [33, 61]) line([x,54 - lift], [x,60], STONE[2],2);
+      poly([[27, 66], [49, 60], [71, 66], [48, 73]], "#17232c");
+      const glow = Math.sin(Math.min(1, opening) * Math.PI) * .7 + .25;
+      const alpha = Math.round(glow * 155).toString(16).padStart(2,"0");
+      c.ellipse(48, 64, 14 + opening * 3, 5, `#e4bc70${alpha}`);
+      if (opening > .2 && opening < 1) {
+        for (const [x, shift] of [[38, -3],[48, 1],[58, 4]])
+          poly([[x-2,64],[x+shift-1,42-lift*.5],[x+shift+1,42-lift*.5],[x+2,64]], `#f5dda040`, undefined);
+        c.pixel(38 + opening * 6, 47 - opening * 11, GOLD[4]);
+        c.pixel(56 - opening * 2, 53 - opening * 12, MAGIC[4]);
+      }
+      c.gem(46, 66, 3, MAGIC[2]);
+      for (const x of [36, 54, 62]) c.pixel(x, 65, GOLD[4]);
+    } else {
+      poly([[23, 66], [26, 52], [49, 44], [73, 52], [75, 66], [48, 75]], GOLD[2]);
+      poly([[26, 53], [49, 46], [71, 53], [48, 61]], GOLD[3]);
+      poly([[24, 64], [26, 54], [48, 62], [48, 74]], GOLD[2]);
+      poly([[48, 62], [71, 54], [74, 65], [48, 74]], GOLD[1]);
+      line([27, 58], [47, 65], GOLD[1]);
+      line([49, 57], [65, 52], GOLD[2]);
+    }
+    for (const x of [28, 41]) {
+      line([x, 69], [x, 84], STONE[2], 3);
+      c.pixel(x, 72, STONE[4]);
+      c.pixel(x, 81, STONE[4]);
+    }
+    if (opening < .15) {
+      c.rect(44, 71 - opening * 15, 8, 9, GOLD[3]);
+      c.rect(47, 74 - opening * 15, 2, 4, GOLD[0]);
+    } else {
+      c.rect(46, 76, 5, 5, GOLD[2]);
+      line([48,74],[48,77],STONE[3],2);
+    }
+    line([24, 66], [48, 74], GOLD[4]);
+    line([49, 74], [74, 66], GOLD[2]);
+  } else if (kind === "crate") {
+    poly([[27, 52], [49, 44], [72, 52], [72, 81], [49, 89], [27, 81]], GOLD[1]);
+    poly([[28, 53], [49, 60], [49, 88], [28, 80]], GOLD[2]);
+    poly([[49, 60], [71, 53], [71, 80], [49, 88]], GOLD[0]);
+    poly([[28, 52], [49, 45], [71, 52], [49, 59]], GOLD[3]);
+    for (let x = 33; x < 48; x += 5) line([x, 55], [x, 83], GOLD[1]);
+    for (let x = 54; x < 69; x += 5) line([x, 60], [x, 83 - (x - 49) / 3], GOLD[1]);
+    line([30, 56], [46, 85], GOLD[3], 4);
+    line([30, 78], [46, 64], GOLD[1], 4);
+    line([52, 62], [68, 78], GOLD[2], 4);
+    line([51, 84], [68, 57], GOLD[2], 4);
+    for (const [x, y] of [[30, 57], [46, 84], [53, 63], [68, 77]]) c.pixel(x, y, STONE[4]);
+    line([29, 52], [49, 46], GOLD[4]);
+  } else if (kind === "barrel") {
+    c.ellipse(48, 81, 17, 8, GOLD[0], INK);
+    poly([[32, 49], [64, 49], [68, 62], [65, 81], [48, 88], [31, 81], [28, 63]], GOLD[2]);
+    for (let x = 33; x < 65; x += 5) {
+      line([x, 51], [x + (x < 48 ? -1 : 1), 80], x % 2 ? GOLD[1] : GOLD[3]);
+    }
+    c.ellipse(48, 49, 16, 7, GOLD[3], INK);
+    c.ellipse(48, 48, 12, 4, GOLD[2]);
+    line([40, 45], [41, 51], GOLD[1]);
+    line([51, 45], [52, 51], GOLD[1]);
+    for (const y of [57, 74]) {
+      c.ring(48, y, y === 57 ? 18 : 17, 5, STONE[1], 0, 3);
+      line([32, y + 1], [43, y + 4], STONE[3], 2);
+      c.pixel(36, y + 2, STONE[4]);
+    }
+  } else if (kind === "secret-wall") {
+    poly([[17, 82], [17, 29], [47, 18], [79, 30], [79, 83], [48, 94]], STONE[1]);
+    poly([[18, 30], [48, 40], [48, 92], [18, 82]], STONE[2]);
+    poly([[48, 40], [78, 31], [78, 82], [48, 92]], STONE[1]);
+    poly([[18, 29], [47, 19], [78, 30], [48, 39]], STONE[3]);
+    for (let y = 42; y <= 81; y += 10) {
+      line([19, y - 5], [47, y + 4], STONE[0], 2);
+      line([49, y + 4], [77, y - 5], STONE[0], 2);
+      line([20, y - 6], [45, y + 2], STONE[3]);
+      const x = (y % 20) ? 31 : 38;
+      line([x, y - 1], [x, y + 8], STONE[0]);
+      line([x + 27, y], [x + 27, y + 8], STONE[0]);
+    }
+    const crack = [[47, 31], [43, 42], [48, 49], [40, 58], [45, 66], [38, 77], [41, 87]];
+    for (let i = 1; i < crack.length; i++) {
+      line(crack[i - 1], crack[i], "#09151f", 2);
+      line([crack[i - 1][0] + 2, crack[i - 1][1]], [crack[i][0] + 2, crack[i][1]], STONE[4]);
+    }
+    line([44, 43], [33, 47], STONE[0], 2);
+    line([43, 63], [56, 70], STONE[0], 2);
+    for (const [x, y] of [[22, 42], [26, 71], [64, 38], [70, 79]]) c.rect(x, y, 3, 2, "#687b63");
+    c.pixel(41, 58, MAGIC[3]);
+  } else if (kind === "upgrade-altar") {
+    poly([[19, 79], [48, 69], [79, 80], [49, 92]], STONE[1]);
+    poly([[25, 74], [48, 66], [72, 75], [71, 83], [49, 90], [25, 82]], STONE[2]);
+    poly([[30, 72], [30, 58], [48, 51], [67, 58], [67, 73], [49, 80]], STONE[2]);
+    poly([[30, 58], [48, 51], [67, 58], [49, 65]], STONE[4]);
+    poly([[31, 60], [48, 65], [48, 78], [31, 72]], STONE[3]);
+    for (const x of [33, 60]) { c.rect(x, 51, 4, 10, GOLD[2]); c.pixel(x + 1, 51, GOLD[4]); }
+    c.ring(48, 49, 15, 6, GOLD[2], 0, 2);
+    c.gem(48, 38, 17, MAGIC[2], MAGIC[4]);
+    c.poly([[48, 22], [52, 38], [48, 52], [48, 37]], MAGIC[3]);
+    c.pixel(42, 29, MAGIC[4]);
+    c.pixel(56, 22, MAGIC[2]);
+    c.pixel(36, 38, MAGIC[3]);
+    line([36, 71], [42, 73], GOLD[3]);
+    line([52, 75], [61, 72], GOLD[2]);
+  } else if (kind === "well") {
+    c.ellipse(48,80,24,10,STONE[0],INK);
+    c.rect(24,68,48,12,STONE[1]);
+    c.ellipse(48,68,24,10,STONE[3],INK);c.ellipse(48,68,18,6,"#1e3945");c.ellipse(48,69,13,3,"#547e87");
+    for(let i=0;i<5;i++){const x=28+i*9;line([x,74],[x,82],STONE[0]);c.pixel(x+2,76,STONE[3]);}
+    for(const x of[25,70])line([x,79],[x,31],GOLD[1],4);
+    line([24,35],[71,35],GOLD[2],4);line([46,35],[46,61],GOLD[3]);
+    c.ellipse(46,63,5,3,GOLD[2],INK);c.rect(42,63,8,6,GOLD[2]);
+    poly([[18,32],[47,17],[78,32],[48,45]],"#5d7978");
+    line([20,32],[47,19],"#94b4a4");line([47,19],[75,32],"#395960",2);
+    for(let i=0;i<4;i++)line([25+i*11,30],[45+i*5,39],"#3a555c");
+  } else if (kind === "bench") {
+    for(const[x,y]of[[23,73],[37,84],[62,65],[76,76]])line([x,y],[x,y+7],GOLD[0],3);
+    poly([[19,67],[57,54],[79,66],[40,80]],GOLD[2]);
+    for(let i=0;i<3;i++)line([22+i*5,67+i*3],[58+i*6,55+i*3],GOLD[3],2);
+    for(const[x,y]of[[24,65],[65,54]])line([x,y],[x,y-14],GOLD[1],3);
+    line([24,52],[65,40],GOLD[2],4);line([24,60],[65,48],GOLD[2],4);
+    line([25,50],[65,38],GOLD[4]);
+  } else if (kind === "planter") {
+    poly([[24,67],[54,57],[76,68],[45,80]],GOLD[2]);
+    poly([[24,67],[45,76],[76,67],[72,82],[45,90],[27,82]],GOLD[1]);
+    poly([[28,67],[54,60],[71,68],[45,76]],"#342d32");
+    line([26,70],[45,79],GOLD[3],2);line([45,79],[74,70],GOLD[2],2);
+    for(let i=0;i<7;i++){
+      const x=31+i*6,y=69-Math.abs(3-i)*1.3;
+      line([x,y],[x-1,y-11],"#607b57",2);
+      c.ellipse(x-3,y-6,4,2,"#75936a");c.ellipse(x+2,y-10,3,2,"#98ad75");
+      if(i%2===0){c.ellipse(x-1,y-13,3,2,i%4?"#d6b477":"#bc8da1");c.pixel(x-1,y-13,"#f3ddb3");}
+    }
+  } else if (kind === "lamp") {
+    c.ellipse(48,86,11,4,STONE[1],INK);c.ellipse(48,83,7,3,STONE[3]);
+    line([48,82],[48,33],STONE[0],4);line([47,80],[47,34],STONE[3]);
+    poly([[37,31],[48,25],[59,31],[56,48],[48,52],[40,48]],GOLD[1]);
+    poly([[41,33],[47,30],[47,47],[42,45]],"#e9c779");
+    poly([[50,30],[55,33],[53,45],[50,47]],"#9d7847");
+    c.gem(48,39,5,"#f5d98c","#fff0bd");
+    for(const x of[39,48,57])line([x,31],[x<48?42:x>48?54:48,48],GOLD[1],2);
+    poly([[35,31],[48,21],[61,31],[48,36]],GOLD[2]);line([38,30],[48,23],GOLD[4]);
+    line([48,22],[48,17],GOLD[2],2);c.gem(48,17,2,GOLD[3]);
+  } else if (kind === "sign") {
+    line([48,85],[48,39],GOLD[1],4);line([47,83],[47,40],GOLD[3]);
+    poly([[24,43],[66,43],[75,50],[66,57],[24,57]],GOLD[2]);
+    poly([[69,60],[31,60],[22,67],[31,74],[69,74]],GOLD[1]);
+    line([27,45],[65,45],GOLD[4]);line([31,62],[66,62],GOLD[3]);
+    for(const[x,y]of[[31,49],[39,49],[49,49],[57,49],[36,66],[44,66],[53,66]])line([x,y],[x+4,y],"#4a3432",2);
+    c.pixel(27,51,STONE[4]);c.pixel(66,68,STONE[4]);c.rect(41,84,14,3,STONE[2]);
   } else if (kind === "cookpot") {
     line([24, 86], [30, 49], GOLD[1], 4);
     line([71, 85], [66, 49], GOLD[1], 4);

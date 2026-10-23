@@ -41,9 +41,9 @@ test("inventário pelo HUD, tecla I e pausa mostra todos os recursos e equipamen
   expect((await stored(page)).survivalMaterials).toEqual(before.survivalMaterials);
   expect((await stored(page)).provisions).toEqual(before.provisions);
   await page.locator('[data-action="inventoryTab"][data-value="equipment"]').click();
-  await expect(page.locator("[data-owned-weapon]")).toHaveCount(3);
+  await expect(page.locator("[data-owned-weapon]")).toHaveCount(13);
   await expect(page.locator('[data-owned-weapon="blade"]')).toContainText("Fioferro +1");
-  await expect(page.locator('[data-owned-weapon="bow"]')).toContainText("Quantidade: 0");
+  await expect(page.locator('[data-owned-weapon="bow"]')).toContainText("Quantidade: 1");
   await expect(page.locator(".inventory-list")).toContainText(BOONS[0].name);
   await page.keyboard.press("i");
   expect((await full(page)).screen).toBe("play");

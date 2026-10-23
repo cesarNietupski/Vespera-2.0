@@ -18,14 +18,14 @@ Os efeitos se somam aos Juramentos da expedição. As reduções de dano e recar
 
 ## Receitas de armas
 
-Fioferro já pertence a Eira. As armas forjadas ficam disponíveis permanentemente; **Equipar** escolhe a arma para a travessia e a escolha é salva.
+Fioferro e Arco do Ocaso já pertencem a Eira; há um espaço para arma corpo a corpo e outro para distância. F alterna entre eles. As armas forjadas ficam disponíveis permanentemente; **Equipar** escolhe a arma para a travessia e a escolha é salva.
 
 | Arma | Ecos | Ferro de memória | Estilhaços de vidro | Brasas antigas |
 | --- | ---: | ---: | ---: | ---: |
 | Âncora Solar | 12 | 6 | 0 | 1 |
-| Arco do Ocaso | 18 | 4 | 4 | 0 |
+| Arco do Ocaso | Inicial | Inicial | Inicial | Inicial |
 
-Na aba **Aprimorar**, cada nível acrescenta 12% de dano e 3% de velocidade de ataque. Os bônus acumulam até +3, individualmente para cada arma. A tela mostra os atributos atuais e o dano do próximo nível.
+Na aba **Aprimorar**, cada nível acrescenta 12% de dano e 3% de velocidade de ataque. Os bônus acumulam até +3, individualmente para cada arma. Também exigem 60 / 180 / 360 XP de uso com a arma correspondente. A tela mostra os atributos atuais e o dano do próximo nível.
 
 | Novo nível | Ecos | Ferro | Vidro | Brasa |
 | --- | ---: | ---: | ---: | ---: |
@@ -45,7 +45,7 @@ Uma arma +1 ou superior pode receber uma infusão. Cada arma possui um único es
 
 ## Materiais e permanência
 
-O kit inicial contém quatro Ferros e dois Vidros. Cada câmara restaurada concede materiais e dois Ecos, salvos imediatamente. Não há coleta manual de objetos nem bolsas perdidas ao morrer.
+O kit inicial contém quatro Ferros e dois Vidros. Cada câmara restaurada concede materiais e dois Ecos, salvos imediatamente. Baús e props quebráveis também fornecem materiais; os avisos mostram os totais adquiridos na fase.
 
 - Ferro: todas as câmaras; encontros de combate concedem de três a seis unidades conforme a região.
 - Vidro: todas as câmaras, com duas unidades nos Jardins e Arquivos e uma nas outras regiões.
@@ -62,4 +62,12 @@ Uma câmara já registrada como restaurada não repete seu saque. Morrer preserv
 
 O save mantém a chave `vespera.save.v2`, com campos adicionais validados. Saves anteriores preservam talentos, armas desbloqueadas, memórias e expedição. Os novos campos recebem valores padrão; habilidades órfãs, níveis fora do limite, materiais inválidos e infusões desconhecidas são descartados ou limitados durante a leitura.
 
-O sistema oferece três bases de arma, três níveis e três infusões; não gera novos modelos de arma aleatórios. Economia e dificuldades receberam testes funcionais, sem alegar balanceamento exaustivo de múltiplas campanhas.
+O sistema oferece treze armas em três famílias de animação, árvores individuais, três níveis e três infusões; não gera novos modelos de arma aleatórios. Economia e dificuldades receberam testes funcionais, sem alegar balanceamento exaustivo de múltiplas campanhas.
+
+## Risco da fase
+
+O estoque anterior e os recursos guardados ao avançar ou voltar ao Farol permanecem. A morte remove 30% dos novos recursos ainda em risco na fase atual, com arredondamento para cima por tipo; a tela de morte lista a perda. Eira retorna ao Refúgio da Centelha, junto de Sálvia. Consulte EXPLORACAO-E-COLETA.md.
+
+## Domínio individual e equipamento duplo
+
+O catálogo completo e os requisitos das sete técnicas por arma estão em [ARSENAL-E-DESAFIOS.md](ARSENAL-E-DESAFIOS.md). A aba Equipamento do inventário permite equipar armas possuídas. Orren continua sendo necessário para forjar, aprimorar, infundir e aprender técnicas. A XP pertence à arma que derrotou o inimigo, persiste e não é gasta nas técnicas.

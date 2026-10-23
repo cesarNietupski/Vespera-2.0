@@ -5,6 +5,7 @@ async function boot(page: Page, funded = true) {
   if (funded) {
     const s = freshSave();
     s.echoes = 400;
+    s.weaponXP.hammer = 60;
     s.materials = { iron: 100, glass: 100, ember: 100 };
     await page.addInitScript((s) => {
       if (!localStorage.getItem("vespera.save.v2"))
@@ -105,7 +106,7 @@ test("oficina forja, aprimora e infunde arma persistente com efeito real no comb
     .toBeLessThan(100000);
   expect(errors).toEqual([]);
 });
-test("materiais de uma câmara restaurada sobrevivem à morte e ao recarregamento", async ({
+test("morte desconta parte do saque da fase e preserva o restante após recarregar", async ({
   page,
 }) => {
   test.setTimeout(90000);
@@ -126,6 +127,6 @@ test("materiais de uma câmara restaurada sobrevivem à morte e ao recarregament
   await page.reload();
   await page.locator('[data-action="hub"]').click();
   await openNpc(page, "orren");
-  expect((await save(page)).materials).toEqual(found.materials);
-  await expect(page.locator('[data-material="iron"]')).toHaveText("7");
+  expect((await save(page)).materials).toEqual({ iron: 6, glass: 3, ember: 0 });
+  await expect(page.locator('[data-material="iron"]')).toHaveText("6");
 });

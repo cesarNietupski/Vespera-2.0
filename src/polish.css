@@ -1,0 +1,54 @@
+.main-menu .menu-panel { top:34vh; max-height:calc(66vh - 72px); overflow-y:auto; scrollbar-color:#a6804f #392b2b; }
+.main-nav > button { min-height:50px; }
+.active-campaign { margin:10px 0 0; color:#e3c791; font-size:14px; text-align:center; }
+.campaign-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.campaign-card { padding:20px; background:#e6d1a6; border:2px solid #9c7947; color:#453329; }
+.campaign-card.active { border-color:#4b7651; box-shadow:inset 0 0 0 2px #96ad77; }
+.campaign-card h3 { font-size:23px; margin:10px 0; overflow-wrap:anywhere; }
+.campaign-card p { color:#5f4931; font-size:16px; }
+.campaign-card small { display:block; font-size:14px; line-height:1.6; }
+.campaign-actions { display:flex; gap:10px; margin-top:14px; }
+.campaign-actions button { flex:1; min-width:0; font-size:15px; }
+.backup-import { display:flex; flex-direction:column; gap:8px; max-width:250px; font-size:15px; color:#513d2d; }
+.backup-import input { font-size:14px; width:100%; }
+.voice-controls { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:12px; }
+.voice-controls button { font-size:14px; padding:7px 10px; border-width:6px; }
+.voice-controls small { flex-basis:100%; font-size:14px; line-height:1.5; color:#685036; }
+.dialogue-topics { display:grid; gap:8px; margin-top:18px; }
+.dialogue-topics button { font-size:16px; text-align:left; padding:9px 14px; border-width:7px; }
+.dialogue-content .dialogue-text { font-size:18px; line-height:1.75; }
+.voice-auto { display:flex!important; align-items:center; gap:12px; font-size:16px; margin-top:20px; }
+.voice-auto input { width:20px!important; height:20px; accent-color:#7f653d; }
+.save-status { position:absolute; right:25px; top:86px; padding:3px 8px; background:#25382de8; border:1px solid #9cb081; color:#ebeed0; font-size:12px; line-height:1.5; pointer-events:none; }
+.save-status[data-failed="true"] { background:#663a2e; color:#ffe3b0; }
+.stage-context { position:absolute; left:25px; top:134px; width:245px; display:grid; gap:12px; }
+.stage-context:has(.objective-panel:empty) { display:none; }
+.stage-context .objective-panel,.stage-context .phase-route,.stage-context .gate-status { position:static; width:100%; margin:0; }
+.stage-context .objective-panel { isolation:isolate; transform:translateZ(0); border-image:none; border:8px double #8e653d; background:#d2b887; box-shadow:inset 0 0 0 2px #ead3a2,0 3px #14213277; }
+.stage-context .objective-panel > * { position:relative; z-index:1; }
+#loot-feed:has(.loot-row:nth-child(6)) { width:480px; grid-template-columns:repeat(2,minmax(0,1fr)); }
+#loot-feed:has(.loot-row:nth-child(6)) .loot-row { min-width:0; }
+@media(max-height:850px) {
+  .stage-context { top:106px; gap:8px; }
+  .stage-context .objective-panel { padding:10px; border-width:7px; }
+  .stage-context .objective-panel h4 { font-size:18px; margin:8px 0; }
+  .stage-context .objective-panel p,.stage-context .objective-panel .secondary { display:none; }
+  .stage-context .objective-panel .eyebrow { font-size:10px; }
+  .stage-context .objective-panel .objective-progress { margin-bottom:6px; }
+  .stage-context .phase-route { padding:7px 9px; font-size:12px; line-height:1.35; max-height:50px; overflow:hidden; }
+  .stage-context .gate-status { padding:6px 9px; font-size:12px; line-height:1.35; }
+  .dialogue-content .dialogue-text { font-size:17px; line-height:1.6; }
+  .dialogue-topics { margin-top:12px; gap:5px; }
+  .npc-service { margin:14px 0 8px; }
+}
+@media(max-width:900px) { .stage-context { left:12px; width:210px; } #loot-feed:has(.loot-row:nth-child(6)) { width:360px; } }
+@media(max-width:700px) { .campaign-grid { grid-template-columns:1fr; } .save-status { right:12px; font-size:11px; } }
+@media(max-height:650px) {
+  .stage-context { top:100px; gap:6px; }
+  .stage-context .objective-panel { padding:8px; }
+  .main-menu .menu-panel { width:min(500px,calc(100vw - 32px)); padding:10px 14px; }
+  .main-menu .main-nav { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; }
+  .main-menu .main-nav > button { min-height:44px; min-width:0; font-size:16px; }
+  .main-menu .main-nav > button:first-child,.main-menu .main-nav > [data-action="continue"] { grid-column:1/-1; }
+  .main-menu .menu-motto,.main-menu .menu-character,.main-menu .menu-key-guide { display:none; }
+}

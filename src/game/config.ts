@@ -1,4 +1,4 @@
-import type { EnemyKind, WeaponId } from "../types";
+import type { EnemyKind } from "../types";
 export const CONTENT_VERSION = "1.0.0";
 export const TILE = 42;
 export const BALANCE = {
@@ -13,53 +13,7 @@ export const BALANCE = {
   crit: 0.12,
   critMultiplier: 1.7,
 };
-export const WEAPONS: Record<
-  WeaponId,
-  {
-    name: string;
-    subtitle: string;
-    damage: number;
-    range: number;
-    duration: number;
-    special: number;
-    icon: string;
-    description: string;
-  }
-> = {
-  blade: {
-    name: "Fioferro",
-    subtitle: "Lâmina de Memórias",
-    damage: 25,
-    range: 100,
-    duration: 0.36,
-    special: 4,
-    icon: "⟋",
-    description:
-      "Seis golpes: cortes, estocada, giro e um finalizador que rompe a guarda.",
-  },
-  hammer: {
-    name: "Âncora Solar",
-    subtitle: "Martelo das Forjas",
-    damage: 48,
-    range: 122,
-    duration: 0.67,
-    special: 5,
-    icon: "⚒",
-    description:
-      "Seis impactos distintos. Varreduras, ascensão e um golpe final de área.",
-  },
-  bow: {
-    name: "Arco do Ocaso",
-    subtitle: "Flecha do último poente",
-    damage: 22,
-    range: 580,
-    duration: 0.4,
-    special: 3.5,
-    icon: "⌁",
-    description:
-      "Seis disparos: flechas gêmeas, leque e perfuração. Segure para carregar.",
-  },
-};
+export { WEAPONS } from "./weapons";
 export const BIOMES = [
   {
     name: "Jardins da Hora Quebrada",

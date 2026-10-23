@@ -1,0 +1,32 @@
+#loot-feed {
+  position: absolute; top: 112px; right: 24px; width: 275px;
+  z-index: 4; pointer-events: none; display: grid; gap: 5px;
+  max-height: calc(100vh - 125px); overflow: hidden;
+}
+.loot-row { display: flex; align-items: center; gap: 10px; padding: 5px 10px; background: #263039f5; color: #ffe3af; border: 2px solid #b18b54; box-shadow: 0 3px #111923; }
+.loot-row .px-icon { width: 28px; height: 28px; }
+.loot-row b { display: block; font-size: 15px; line-height: 1.4; }
+.loot-row small { display: block; font-size: 13px; line-height: 1.25; color: #d4c6a9; }
+.phase-route { position: absolute; top: 425px; left: 25px; width: 245px; padding: 12px; color: #eed7a8; background: #233039ef; border: 2px solid #a98453; font-size: 15px; line-height: 1.5; }
+.map-direction { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; color: #523b2e; font-size: 17px; }
+.stage-map { display: block; width: 100%; max-height: 48vh; border: 4px solid #8c6946; background: #15242c; }
+.stage-map text { font: 700 9px "Segoe UI"; text-anchor: middle; fill: #19232a; }
+.map-route-line { fill: none; stroke: #ffe09a; stroke-width: 3; stroke-dasharray: 5 3; opacity: .85; }
+.map-player circle { fill: #fff5d4; stroke: #9ef1d7; stroke-width: 3; }
+.stage-map .map-player text { fill: white; font-size: 12px; paint-order: stroke; stroke: #15242c; stroke-width: 3px; }
+.map-goal circle { fill: #e9be69; stroke: #47332b; stroke-width: 1.5; }
+.map-done circle { fill: #8bd2b1; }
+.map-quest circle { fill: #f19886; }
+.map-chest circle { fill: #d4a769; }
+.map-entry circle { fill: #a8bde1; }
+.map-exit circle { fill: #858491; }
+.map-legend { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 14px; color: #513b2e; font-size: 15px; line-height: 1.5; }
+.death-loss { border: 2px solid #ab7653; padding: 16px; background: #e6caa1; margin: 20px 0; font-size: 17px; color: #55362b; }
+.death-loss span { display: inline-block; margin: 8px 15px 0 0; font-size: 16px; }
+#ui:has(.modal-backdrop) #loot-feed { z-index: 1; }
+.modal-backdrop { z-index: 5; }
+@media (max-width: 900px) {
+  #loot-feed { width: 215px; right: 12px; }
+  .phase-route { top: 390px; left: 12px; width: 210px; font-size: 14px; }
+  .stage-map { max-height: 43vh; }
+}

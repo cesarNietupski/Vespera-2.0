@@ -9,7 +9,17 @@ const AURORA = ["#19464e", "#2b807d", "#69bd9d", "#b5efcb", "#f0ffd8"];
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const point = (x, y) => [x, y];
 
-export function heroFrame(state, f, count, dir, weapon = "blade", npc = "") {
+export const WEAPON_ART_FAMILY = {
+  blade: "blade", hammer: "hammer", bow: "bow",
+  dagger: "blade", spear: "blade", greatsword: "hammer", axe: "hammer",
+  scythe: "hammer", rapier: "blade", crossbow: "bow", staff: "bow",
+  pistol: "bow", chakram: "bow",
+};
+export function heroFrame(state, f, count, dir, weaponId = "blade", npc = "") {
+  // A resident's work tools belong to its identity, independently of Eira's loadout.
+  if (npc) weaponId = "blade";
+  const weapon = WEAPON_ART_FAMILY[weaponId] ?? "blade";
+  const artisan = ["lume", "caio", "iria"].includes(npc);
   const c = new PixelCanvas(56),
     u = f / Math.max(1, count - 1),
     cycle = (f / count) * Math.PI * 2;
@@ -287,7 +297,15 @@ export function heroFrame(state, f, count, dir, weapon = "blade", npc = "") {
   } else if (state === "dash") {
     offset = -1.3;
     hand = [-1, -20];
-  } else if (npc === "lume") {
+  } else if (state === "interact") {
+    hand = [7 + Math.sin(cycle) * 2, -29 - Math.sin(cycle) * 3];
+    offset = -0.6;
+  }
+  if (artisan) {
+    const gesture = state === "interact" ? Math.sin(cycle) * 2 : moving ? Math.sin(cycle) * 0.5 : 0;
+    hand = [7 + gesture * 0.35, -24 - gesture];
+  }
+  if (npc === "lume") {
     poly(
       [
         [-4, -27],
@@ -297,22 +315,8 @@ export function heroFrame(state, f, count, dir, weapon = "blade", npc = "") {
       ],
       "#d1bf96",
     );
-    line([7, -25], [13, -11], GOLD[2], 2);
-    ell(13, -11, 3, 2, "#684733", INK);
   } else if (npc === "caio") {
-    ell(10, -18, 4, 6, "#3c8892", INK);
-    ell(9, -20, 2, 3, "#9bd6ce");
-    line([8, -25], [11, -25], GOLD[2], 2);
     line([-5, -27], [5, -13], "#a4bdab", 1);
-  } else if (npc === "iria") {
-    ell(10, -18, 4, 5, "#a27278", GOLD[1]);
-    for (let j = 0; j < 4; j++)
-      line([7, -22 + j * 2], [13, -20 + j * 2], "#dfbc9d");
-    line([5, -29], [13, -26], STEEL[4]);
-    line([5, -25], [13, -29], STEEL[3]);
-  } else if (state === "interact") {
-    hand = [7 + Math.sin(cycle) * 2, -29 - Math.sin(cycle) * 3];
-    offset = -0.6;
   }
   const shoulder = [5, -28],
     elbow = [hand[0] - 3, -23 + (weapon === "bow" ? -1 : 2)];
@@ -334,9 +338,114 @@ export function heroFrame(state, f, count, dir, weapon = "blade", npc = "") {
       STEEL[2],
     );
     line([9, -13], [15, -14], STEEL[4]);
+  } else if (npc === "lume") {
+    const [x,y] = hand;
+    line([x,y],[x+3,y+11],GOLD[1],3);
+    line([x-1,y],[x+2,y+10],GOLD[3]);
+    ell(x+3,y+11,3.5,2.5,"#684733",INK);
+    line([x+1,y+10],[x+4,y+10],"#bc9460");
+    if(state === "interact") {
+      for(let i=0;i<3;i++)c.pixel(...P(x+2+i,y+5-i*3+Math.sin(cycle+i)),"#d4c3a3");
+    }
+  } else if (npc === "caio") {
+    const [x,y] = hand;
+    ell(x+2,y+7,4,6,"#3c8892",INK);
+    ell(x+1,y+5,2,3,"#9bd6ce");
+    line([x,y],[x+3,y],GOLD[2],2);
+    line([x,y+8],[x+4,y+8],"#d7cba0",2);
+    c.pixel(...P(x+1,y+3),"#d2ece0");
+    if(state === "interact") {
+      c.pixel(...P(x+6,y+8+Math.sin(cycle)*2),"#9bd6ce");
+      c.pixel(...P(x+7,y+10+Math.sin(cycle+1)*2),"#9bd6ce");
+    }
+  } else if (npc === "iria") {
+    const [x,y] = hand;
+    ell(x+2,y+6,4,5,"#a27278",GOLD[1]);
+    for(let i=0;i<4;i++)line([x-1,y+2+i*2],[x+5,y+4+i*2],"#dfbc9d");
+    line([-5,-26],[-1,-23],STEEL[3]);line([-5,-22],[-1,-26],STEEL[4]);
+    if(state === "interact")line([x+3,y+3],[-1,-24+Math.sin(cycle)],"#e7cbb1");
   } else if (state === "interact") {
     limb([-4, -28], [2, -27], 3, STEEL[2], STEEL[3]);
     c.gem(...P(8, -31), 2, AURORA[2]);
+  } else if (!["blade", "hammer", "bow"].includes(weaponId)) {
+    // New silhouettes share articulated poses, with authored equipment in hand space.
+    const a = aim + (weapon === "bow" ? 0 : offset + (atk ? 0 : 0.85));
+    const vx = Math.cos(a), vy = Math.sin(a), nx = -vy, ny = vx;
+    const q = (forward, side = 0) => [hand[0] + vx * forward + nx * side, hand[1] + vy * forward + ny * side];
+    const wline = (a, b, color, width = 1) => line(q(...a), q(...b), color, width);
+    const wpoly = (vertices, color) => poly(vertices.map(([x,y]) => q(x,y)), color);
+    if (weaponId === "dagger") {
+      wline([-4, 0], [3, 0], GOLD[1], 3);
+      wpoly([[2,-2],[11,0],[2,2]], "#bf8f9d");
+      wline([3,0],[10,0], "#ffe2d1");
+      wline([1,-3],[1,3],GOLD[3],2);
+    } else if (weaponId === "spear") {
+      wline([-8,0],[12,0], INK,3);
+      wline([-8,0],[12,0], GOLD[2],1);
+      wpoly([[10,-2],[15,0],[10,2],[11,0]],STEEL[3]);
+      wline([11,0],[14,0],AURORA[4]);
+      wline([8,-2],[8,2],GOLD[3],2);
+    } else if (weaponId === "greatsword") {
+      wline([-5,0],[2,0],GOLD[1],3);
+      wpoly([[2,-3],[12,-3],[16,0],[12,3],[2,3]],STEEL[2]);
+      wpoly([[3,-2],[12,-2],[15,0],[3,0]],STEEL[4]);
+      wline([3,1],[12,1],"#4d7190");
+      wline([1,-5],[1,5],GOLD[3],2);
+      c.gem(...P(...q(-4,0)),2,GOLD[3]);
+    } else if (weaponId === "axe") {
+      wline([-5,0],[14,0],INK,3);
+      wline([-5,0],[14,0],GOLD[2],1);
+      wpoly([[10,-2],[9,-7],[14,-6],[16,-2],[15,5],[10,7],[11,2]],STEEL[2]);
+      wline([14,-5],[15,-2],STEEL[4],2);
+      wline([15,-2],[14,4],STEEL[4],2);
+      wline([10,-1],[14,-1],GOLD[3],2);
+    } else if (weaponId === "scythe") {
+      wline([-7,0],[14,0],INK,3);
+      wline([-7,0],[14,0],"#8c6e84");
+      wpoly([[13,1],[15,-3],[11,-7],[5,-8],[1,-6],[6,-5],[10,-3],[11,1]],"#7d96af");
+      wline([3,-6],[7,-6],"#d7d9f0");
+      wline([7,-6],[11,-4],"#d7d9f0");
+      wline([11,-4],[13,-1],"#d7d9f0");
+    } else if (weaponId === "rapier") {
+      wline([-4,0],[2,0],GOLD[1],2);
+      c.ring(...P(...q(1,0)),3,3,GOLD[3],a,1);
+      wline([3,0],[14,0],STEEL[0],2);
+      wline([3,0],[14,0],AURORA[4]);
+      wline([-3,-2],[1,-3],GOLD[2]);
+    } else if (weaponId === "crossbow") {
+      wline([-5,0],[12,0],INK,4);
+      wline([-5,0],[12,0],GOLD[2],2);
+      wline([4,-9],[9,-5],STEEL[2],3);
+      wline([9,-5],[9,5],STEEL[3],2);
+      wline([9,5],[4,9],STEEL[2],3);
+      wline([4,-8],[1,0],HAIR[2]);
+      wline([1,0],[4,8],HAIR[2]);
+      if (!atk || u < .52) wline([-2,0],[14,0],AURORA[3]);
+      wline([-4,1],[-6,5],GOLD[1],3);
+    } else if (weaponId === "staff") {
+      wline([-11,0],[10,0],INK,3);
+      wline([-11,0],[10,0],"#8f6f8e");
+      c.ring(...P(...q(10,0)),4,5,GOLD[2],a,2);
+      c.gem(...P(...q(10,0)),4,"#9d96e0","#e9dfff");
+      if (atk && u > .35 && u < .65) c.ring(...P(...q(10,0)),6,6,"#c7a8ef90",u,1);
+      wline([-4,-1],[-2,1],GOLD[3]);
+    } else if (weaponId === "pistol") {
+      wpoly([[-3,-2],[11,-2],[12,1],[1,2],[-1,7],[-5,6],[-3,1]],STEEL[1]);
+      wline([-2,-2],[10,-2],STEEL[4],2);
+      wline([-3,3],[-4,6],GOLD[2],2);
+      wline([7,-1],[11,-1],GOLD[3],2);
+      if (atk && u > .43 && u < .6) wpoly([[12,-2],[15,0],[12,2],[13,0]],"#f7d295");
+    } else if (weaponId === "chakram") {
+      const p=P(...q(5,0));
+      c.ring(...p,7,8,INK,0,3);
+      c.ring(...p,6,7,GOLD[3],0,2);
+      c.ring(...p,5,6,STEEL[4],0,1);
+      for (let j=0;j<4;j++) {
+        const aa=a+j*Math.PI/2;
+        c.pixel(p[0]+Math.cos(aa)*7,p[1]+Math.sin(aa)*8,AURORA[4]);
+      }
+    }
+    if (weapon === "bow") limb([-4,-28],[hand[0]-1,hand[1]+2],3,SKIN[1],SKIN[3]);
   } else if (weapon === "bow") {
     const vx = Math.cos(aim),
       vy = Math.sin(aim),
@@ -515,7 +624,7 @@ export function heroFrame(state, f, count, dir, weapon = "blade", npc = "") {
   } else if (npc === "orren") {
     line([-3, -35], [4, -35], cloth[0], 2);
     line([-3, -34], [4, -34], GOLD[3]);
-  } else c.gem(...P(0, -25), 2, AURORA[3]);
+  } else if (!artisan) c.gem(...P(0, -25), 2, AURORA[3]);
   if (npc === "lume") {
     ell(0, -40.5, 6, 2, "#f1dec0", INK);
     line([-5, -39], [5, -39], "#b6a27b", 2);
@@ -534,7 +643,7 @@ export function heroFrame(state, f, count, dir, weapon = "blade", npc = "") {
     line([-4, -38], [5, -38], "#c899a3", 2);
     c.pixel(...P(4, -39), "#f2dfb7");
   }
-  if (state === "interact")
+  if (state === "interact" && !artisan)
     for (let i = 0; i < 4; i++) {
       const a = cycle + (i * Math.PI) / 2;
       c.pixel(...P(9 + Math.cos(a) * 4, -31 + Math.sin(a) * 4), AURORA[3]);

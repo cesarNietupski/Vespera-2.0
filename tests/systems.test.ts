@@ -196,7 +196,7 @@ describe("Objetivos e progressão", () => {
       }),
     );
     expect(bad.echoes).toBe(0);
-    expect(bad.unlocked).toEqual(["blade"]);
+    expect(bad.unlocked).toEqual(["blade", "bow"]);
     expect(bad.talents.power).toBe(5);
     expect(bad.settings.music).toBe(1);
   });

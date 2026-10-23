@@ -10,11 +10,11 @@ Todos os atores, pisos, props, ícones, retratos, logotipo e fundo do menu são 
 
 ## Animação
 
-Contrato compartilhado em `src/data/animations.json`: gerador, gameplay, controlador visual e testes consultam as mesmas contagens. Eira possui 15 ações, oito direções e três equipamentos: **1.280 quadros por arma**. Inimigos têm antecipação, ataque, recuperação, reação, morte e ciclos de movimento próprios; NPCs agora têm sprites exclusivos. Chefes possuem sequências próprias de investida, disparo, erupção e nova.
+Contrato compartilhado em `src/data/animations.json`: gerador, gameplay, controlador visual e testes consultam as mesmas contagens. Eira possui 15 ações, oito direções e treze equipamentos: **1.280 quadros por arma**. Inimigos têm antecipação, ataque, recuperação, reação, morte e ciclos de movimento próprios; NPCs agora têm sprites exclusivos. Chefes possuem sequências próprias de investida, disparo, erupção e nova.
 
 As poses usam juntas separadas, passadas alternadas, elevação dos pés, atraso da capa e cabelos, antecipação, aceleração do golpe e acomodação final. Arco tem desenho da corda, retenção e soltura; martelo usa levantamentos e impactos; lâmina alterna cortes, estocada, giro, ascensão e finalizador.
 
-Morte, dano, ressurreição e ações finitas param no último quadro. Movimento e idle são cíclicos. A animação de canalização é usada ao segurar E junto ao objetivo. Portais, tochas, engrenagens, cristais, flores, obeliscos, forjas, espelhos e astrolábios usam quadros animados em tempo de execução.
+Morte, dano, ressurreição e ações finitas param no último quadro. Movimento e idle são cíclicos. A animação de canalização é usada ao segurar E junto ao objetivo. Portões, tochas, engrenagens, cristais, flores, obeliscos, forjas, espelhos e astrolábios usam quadros animados em tempo de execução.
 
 ## Botão esquerdo
 
@@ -41,9 +41,9 @@ npm run build
 npm run test:e2e
 ```
 
-Fontes: `scripts/art/pixel-raster.mjs`, `pixel-actors.mjs`, `pixel-world.mjs`, `pixel-ui.mjs`. Atlas nativos editáveis: `public/assets/sources/*.native.png`. Metadados: `*.pixel.json`, manifesto e atlas JSON.
+Fontes: `scripts/art/pixel-raster.mjs`, `pixel-actors.mjs`, `pixel-world.mjs`, `pixel-village.mjs`, `pixel-ui.mjs`. Atlas nativos editáveis: `public/assets/sources/*.native.png`. Metadados: `*.pixel.json`, manifesto e atlas JSON.
 
-A checagem de bordas percorre todos os quadros dos três equipamentos, seis NPCs, oito inimigos e quatro chefes. A suíte também verifica RGBA de 32 bits, ampliação exata 2×, poses diferentes para os seis ataques, duração das ações e o encadeamento real com mouse no navegador. Lume, Caio e Íria têm atlas e retratos próprios, acompanhados de cozinha, cisterna e tear no Farol.
+A checagem de bordas percorre todos os quadros dos treze equipamentos, seis NPCs, oito inimigos e quatro chefes. A suíte também verifica RGBA de 32 bits, ampliação exata 2×, poses diferentes para os seis ataques, duração das ações e o encadeamento real com mouse no navegador. Lume, Caio e Íria têm atlas e retratos próprios, acompanhados de cozinha, cisterna e tear no Farol.
 
 O estilo segue sendo arte procedural autoral. Não se apresenta como uma coleção de sprites pintados individualmente por um artista, nem como acabamento AAA. A renovação visual mantém o save anterior e os sistemas existentes da campanha.
 
@@ -56,3 +56,13 @@ O ponto de apoio define a sobreposição entre sprites e cenário. Sombras não 
 As molduras preservam cantos completos com recorte de 12 pixels na origem; os materiais interiores têm ruído suave para não competir com a leitura. Engrenagens usam apenas seus quadros em pixels, sem rotação adicional que deformava a grade.
 
 Painéis abrem opacos desde o primeiro frame, evitando que cenário e textos se misturem durante um fade de entrada. A escuridão de fundo fica somente fora do pergaminho.
+
+## Arsenal e baús
+
+Dez novas silhuetas de equipamento e seus ícones foram adicionados, preservando a grade de 1.280 frames e o pivô de Eira. As famílias de lâmina, impacto e disparo reaproveitam o rig, com geometrias de arma próprias. Baús têm oito quadros de fechadura, tampa e luz, sincronizados com aproximação e interação de Eira. O gerador aceita `--select eira-dagger,icon-dagger,props` para regenerar um subconjunto e preservar o restante do manifesto.
+
+## Casas e portões
+
+O atlas `village` contém seis casas com pisos, paredes e decoração de profissão, seis telhados separados e o farol central: 13 quadros de 384×352 px, produzidos em 192×176 e ampliados 2×. A origem do piso fica em (192,242); corpo e telhado usam profundidades separadas para permitir entrada e transparência suave. Gramado e calçamento claro têm tiles próprios. Poço, bancos, floreiras, luminárias e placas completam a praça.
+
+Portões têm moldura de pedra, folhas de madeira, ferragens e oito quadros de abertura. A chave e o nicho de bronze usam quadros próprios. O conjunto mantém RGBA8888 e pixels nearest, com 86 assets e 22.286 frames no manifesto. O atlas de ambientação acrescenta 15 pisos planos e 20 elementos de margem para a vila e as quatro regiões, substituindo os vazios escuros por solo contínuo.

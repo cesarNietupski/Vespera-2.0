@@ -8,6 +8,9 @@ export interface HubNpc {
   x: number;
   y: number;
   station?: string;
+  houseX: number;
+  houseY: number;
+  houseName: string;
 }
 export const HUB_NPCS: HubNpc[] = [
   {
@@ -16,8 +19,11 @@ export const HUB_NPCS: HubNpc[] = [
     role: "Guardiã da Centelha",
     service: "skills",
     action: "Desenvolver habilidades",
-    x: 10,
-    y: 6,
+    x: 7.8,
+    y: 8.8,
+    houseX: 7,
+    houseY: 8,
+    houseName: "Casa da Centelha",
   },
   {
     id: "orren",
@@ -25,8 +31,11 @@ export const HUB_NPCS: HubNpc[] = [
     role: "Ferreiro sem Visão",
     service: "forge",
     action: "Abrir a forja",
-    x: 9,
-    y: 12,
+    x: 17.8,
+    y: 23.8,
+    houseX: 17,
+    houseY: 23,
+    houseName: "Ferraria do Sol",
   },
   {
     id: "nim",
@@ -34,8 +43,11 @@ export const HUB_NPCS: HubNpc[] = [
     role: "Colecionador de Memórias",
     service: "memories",
     action: "Rever memórias",
-    x: 15,
-    y: 7,
+    x: 17.8,
+    y: 8.8,
+    houseX: 17,
+    houseY: 8,
+    houseName: "Arquivo das Memórias",
   },
   {
     id: "lume",
@@ -43,8 +55,11 @@ export const HUB_NPCS: HubNpc[] = [
     role: "Cozinheira do Farol",
     service: "food",
     action: "Preparar comida",
-    x: 6,
-    y: 9,
+    x: 7.8,
+    y: 23.8,
+    houseX: 7,
+    houseY: 23,
+    houseName: "Cozinha do Abrigo",
     station: "cookpot",
   },
   {
@@ -53,8 +68,11 @@ export const HUB_NPCS: HubNpc[] = [
     role: "Guardião das Águas",
     service: "drink",
     action: "Preparar bebidas",
-    x: 13,
-    y: 12,
+    x: 27.8,
+    y: 23.8,
+    houseX: 27,
+    houseY: 23,
+    houseName: "Casa das Águas",
     station: "cistern",
   },
   {
@@ -63,8 +81,11 @@ export const HUB_NPCS: HubNpc[] = [
     role: "Costureira do Abrigo",
     service: "clothes",
     action: "Confeccionar vestimentas",
-    x: 16,
-    y: 10,
+    x: 27.8,
+    y: 8.8,
+    houseX: 27,
+    houseY: 8,
+    houseName: "Ateliê dos Fios",
     station: "loom",
   },
 ];

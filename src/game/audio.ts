@@ -7,6 +7,7 @@ export class AudioDirector {
   step = 0;
   biome = -1;
   combat = false;
+  speaking = false;
   constructor(public settings: Settings) {}
   start(): void {
     if (this.context) {
@@ -28,7 +29,7 @@ export class AudioDirector {
   apply(): void {
     if (this.context) {
       this.musicGain!.gain.setTargetAtTime(
-        this.settings.music * 0.17,
+        this.settings.music * 0.17 * (this.speaking ? .28 : 1),
         this.context.currentTime,
         0.1,
       );
@@ -39,6 +40,7 @@ export class AudioDirector {
       );
     }
   }
+  setSpeaking(speaking: boolean): void { this.speaking = speaking; this.apply(); }
   tone(
     freq: number,
     duration: number,

@@ -330,7 +330,7 @@ export function findPath(l: Layout, from: Vec, to: Vec): Vec[] {
   const cost = new Map([[start, 0]]),
     prev = new Map<string, string>();
   let count = 0;
-  while (open.length && count++ < 600) {
+  while (open.length && count++ < 3000) {
     open.sort((a, b) => a.f - b.f);
     const p = open.shift()!,
       key = `${p.x},${p.y}`;

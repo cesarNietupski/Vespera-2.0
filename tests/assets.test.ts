@@ -48,7 +48,7 @@ describe("Assets produzidos e atlas carregáveis", () => {
       }
     });
   it("Eira tem 15 ações e oito direções em cada equipamento, incluindo seis ataques M1", () => {
-    for (const name of ["eira", "eira-hammer", "eira-bow"]) {
+    for (const name of ["eira", "eira-hammer", "eira-bow", "eira-dagger", "eira-spear", "eira-greatsword", "eira-axe", "eira-scythe", "eira-rapier", "eira-crossbow", "eira-staff", "eira-pistol", "eira-chakram"]) {
       const frames = JSON.parse(
         readFileSync(path.join(root, `${name}.json`), "utf8"),
       ).frames;

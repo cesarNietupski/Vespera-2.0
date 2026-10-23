@@ -1,4 +1,4 @@
-import { heroFrame, enemyFrame, bossFrame } from "./art/pixel-actors.mjs";
+import { heroFrame, enemyFrame, bossFrame, WEAPON_ART_FAMILY } from "./art/pixel-actors.mjs";
 import fs from "node:fs/promises";
 const a = JSON.parse(await fs.readFile("src/data/animations.json", "utf8"));
 function edge(c) {
@@ -19,7 +19,7 @@ for (const npc of ["salvia", "orren", "nim", "lume", "caio", "iria"])
         const n = edge(heroFrame(state, f, count, d, "blade", npc));
         if (n) (result[`${npc}:${state}`] ??= []).push([d, f, n]);
       }
-for (const weapon of ["blade", "hammer", "bow"])
+for (const weapon of Object.keys(WEAPON_ART_FAMILY))
   for (const [state, count] of Object.entries(a.hero))
     for (let d = 0; d < 8; d++)
       for (let f = 0; f < count; f++) {

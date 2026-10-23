@@ -1,0 +1,25 @@
+{
+  "name": "village",
+  "version": "2.0.0",
+  "nativeSize": 192,
+  "nativeHeight": 176,
+  "outputScale": 2,
+  "format": "RGBA8888",
+  "method": "Original pixel clusters, articulated joints and authored action keyframes; nearest-neighbour upscale.",
+  "generator": "scripts/art/pixel-village.mjs",
+  "frames": [
+    "house-salvia",
+    "roof-salvia",
+    "house-orren",
+    "roof-orren",
+    "house-nim",
+    "roof-nim",
+    "house-lume",
+    "roof-lume",
+    "house-caio",
+    "roof-caio",
+    "house-iria",
+    "roof-iria",
+    "lighthouse"
+  ]
+}

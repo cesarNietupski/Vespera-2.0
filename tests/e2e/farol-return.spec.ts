@@ -42,7 +42,7 @@ test("retorno após concluir preserva a expedição, permite abastecer e continu
   expect(resumed.run.coins).toBe(before.run.coins);
   expect(resumed.materials).toEqual(before.materials);
   expect(resumed.echoes).toBe(before.echoes);
-  await page.evaluate(() => (window as any).vesperaTest.portal());
+  await page.evaluate(() => ((window as any).vesperaTest.unlockGate(), (window as any).vesperaTest.portal()));
   await page.keyboard.press("e");
   await expect.poll(async () => (await snap(page)).room).toBe(1);
   await expect(page.locator("#room-return")).toBeHidden();
@@ -60,6 +60,8 @@ test("chefes permitem retornar, inclusive antes da decisão final, e continuar d
       await page.locator('[data-action="boon"]').first().click();
       await page.locator('#room-return [data-action="returnToHub"]').click();
     } else {
+      await expect(page.locator("#room-return")).toBeVisible();
+      await page.evaluate(() => { const t = (window as any).vesperaTest; t.unlockGate(); t.portal(); }); await page.keyboard.press("e");
       await page.getByRole("button", { name: "Voltar ao Farol antes de decidir" }).click();
     }
     await expect(page.getByText("Farol dos Ecos", { exact: true })).toBeVisible();
@@ -68,7 +70,7 @@ test("chefes permitem retornar, inclusive antes da decisão final, e continuar d
     await page.getByRole("button", { name: "Continuar expedição salva →" }).click();
     expect((await snap(page)).room).toBe(room);
     expect((await snap(page)).cleared).toBe(true);
-    await page.evaluate(() => (window as any).vesperaTest.portal());
+    await page.evaluate(() => ((window as any).vesperaTest.unlockGate(), (window as any).vesperaTest.portal()));
     await page.keyboard.press("e");
     if (room === 6)
       await expect.poll(async () => (await snap(page)).room).toBe(9);

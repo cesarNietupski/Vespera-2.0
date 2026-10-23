@@ -1,10 +1,9 @@
 import Phaser from "phaser";
-import type { EnemyKind, Layout, Prop, Vec, NpcId } from "../types";
+import type { EnemyKind, Layout, Prop, Vec, NpcId, Loot, WeaponId } from "../types";
 import type { App } from "../main";
 import { BALANCE, BIOMES, ENEMIES, TILE, WEAPONS } from "./config";
 import {
   findPath,
-  generateLayout,
   pick,
   project,
   rng,
@@ -19,9 +18,18 @@ import { AuroraPipeline } from "./shaders";
 import { ANIMATIONS, HERO_FRAMES, BOSS_PATTERNS, framesFor } from "./animation";
 import { AttackBuffer, COMBOS, comboMove } from "./combos";
 import { obscuresActor, approachAlpha } from "./presentation";
-import { progressionStats, awardRoomSalvage, MATERIALS } from "./crafting";
+import { progressionStats, roomSalvage } from "./crafting";
 import { HUB_NPCS } from "../data/npcs";
-import { tickNeeds, survivalEffects, grantSurvivalLoot } from "./survival";
+import { tickNeeds, survivalEffects, survivalLoot } from "./survival";
+import { generateStage, openSecret, exploreCells, type StageLayout } from "./exploration";
+import { actorTexture, WEAPON_IDS } from "./weapons";
+import { awardWeaponXP } from "./mastery";
+import { generateVillage, houseAt, type VillageLayout } from "./village";
+import { gateBlock, gateCollides, revealGateKey, collectGateKey } from "./gates";
+import { phaseState, grantLoot } from "./loot";
+import { environmentTheme, planEnvironment, LANDSCAPES, type EnvironmentPlan } from "./environment";
+import { paintLandscape, updateLandscapeGround } from "./landscape-renderer";
+import type { WorldCheckpoint } from "./checkpoint";
 
 type AIState =
   | "idle"
@@ -37,6 +45,7 @@ type AIState =
   | "dead";
 interface Enemy {
   id: number;
+  lootKey: string;
   kind: EnemyKind;
   pos: Vec;
   health: Vitality;
@@ -51,9 +60,12 @@ interface Enemy {
   phase: number;
   burn: number;
   slow: number;
+  burnDamage: number;
+  slowAmount: number;
   hpbar: Phaser.GameObjects.Graphics;
   target: Vec;
   attackResolved: boolean;
+  lastHitWeapon?: WeaponId;
 }
 interface Shot {
   active: boolean;
@@ -64,6 +76,7 @@ interface Shot {
   friendly: boolean;
   image: Phaser.GameObjects.Image;
   pierce: number;
+  weapon?: WeaponId;
   hit: Set<number>;
 }
 interface Marker {
@@ -94,6 +107,7 @@ export class Preload extends Phaser.Scene {
       "eira",
       "eira-hammer",
       "eira-bow",
+      ...[...new Set([...Object.values(this.app.store.data.loadout), ...Object.values(this.app.store.data.run?.loadout ?? {})])].filter(id => !["blade", "hammer", "bow"].includes(id)).map(id => actorTexture(id)),
       "salvia",
       "orren",
       "nim",
@@ -117,9 +131,12 @@ export class Preload extends Phaser.Scene {
       "tiles2",
       "tiles3",
       "props",
+      "village",
+      "scenery",
     ])
       this.load.atlas(name, `assets/${name}.png`, `assets/${name}.json`);
     this.load.image("tear", "assets/tear.png");
+    this.load.json("dialogue-voices", "assets/dialogue-voices.json");
     this.load.on("loaderror", (file: { key: string }) =>
       this.app.ui.error(
         `Não foi possível carregar ${file.key}. Recarregue a página após gerar os assets.`,
@@ -127,6 +144,7 @@ export class Preload extends Phaser.Scene {
     );
   }
   create(): void {
+    this.app.voice.setCatalog(this.cache.json.get("dialogue-voices"));
     this.scene.start("World");
   }
 }
@@ -151,6 +169,21 @@ export class World extends Phaser.Scene {
   pendingActions = new Set<string>();
   actions = new Set<string>();
   layout!: Layout;
+  get stage(): StageLayout { return this.layout as StageLayout; }
+  relays: Marker[] = [];
+  stageZones: number[] = [];
+  escortPath: Vec[] = [];
+  escortLength = 1;
+  escortTravel = 0;
+  chestInteraction: { index: number; time: number; from: Vec; target: Vec; awarded: boolean } | null = null;
+  arrivals: { kind: EnemyKind; pos: Vec; remaining: number; image: Phaser.GameObjects.Image; label: Phaser.GameObjects.Text }[] = [];
+  villagePath: Vec[] = [];
+  villageTarget: NpcId | "gate" | null = null;
+  villageHouses: { npc: NpcId; body: Phaser.GameObjects.Image; roof: Phaser.GameObjects.Image }[] = [];
+  keyImage: Phaser.GameObjects.Image | null = null;
+  gateOpening = 0;
+  environment: EnvironmentPlan | null = null;
+  landscapeGround: Phaser.GameObjects.TileSprite | null = null;
   player!: ActorVisual;
   pos: Vec = { x: 147, y: 399 };
   health = new Vitality(120);
@@ -195,12 +228,14 @@ export class World extends Phaser.Scene {
   roomRng = () => 0.5;
   intro = 0;
   id = 0;
+  spawnSerial = 0;
   decorTime = 0;
   foreground: Phaser.GameObjects.Image[] = [];
   occluders: {
     image: Phaser.GameObjects.Image;
     attachments: Phaser.GameObjects.Image[];
     restAlpha: number;
+    blockedAlpha: number;
     halfWidth: number;
     height: number;
   }[] = [];
@@ -210,12 +245,12 @@ export class World extends Phaser.Scene {
   create(): void {
     this.app.world = this;
     const kb = this.input.keyboard!;
-    this.keys = kb.addKeys("W,A,S,D,SPACE,SHIFT,E,Q,R,T,TAB,ESC") as Record<
+    this.keys = kb.addKeys("W,A,S,D,SPACE,SHIFT,E,Q,R,T,F,TAB,ESC") as Record<
       string,
       Phaser.Input.Keyboard.Key
     >;
     kb.addCapture(["SPACE", "TAB", "W", "A", "S", "D"]);
-    for (const key of ["SPACE", "SHIFT", "E", "Q", "R", "T"])
+    for (const key of ["SPACE", "SHIFT", "E", "Q", "R", "T", "F"])
       this.keys[key].on("down", () => this.pendingActions.add(key));
     this.input.mouse?.disableContextMenu();
     this.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
@@ -246,13 +281,44 @@ export class World extends Phaser.Scene {
     this.enterHub();
     this.app.ui.menu();
   }
+  async ensureWeapon(id: WeaponId): Promise<void> {
+    const texture = actorTexture(id);
+    if (this.textures.exists(texture)) return;
+    await new Promise<void>((resolve, reject) => {
+      this.load.atlas(texture, `assets/${texture}.png`, `assets/${texture}.json`);
+      this.load.once(`filecomplete-json-${texture}`, () => resolve());
+      this.load.once("loaderror", () => reject(new Error(`Falha ao carregar ${texture}`)));
+      this.load.once("complete", () => this.textures.exists(texture) ? resolve() : reject(new Error(texture)));
+      if (!this.load.isLoading()) this.load.start();
+    });
+  }
+  showWeapon(id: WeaponId): void {
+    if (!this.player || !this.textures.exists(actorTexture(id))) return;
+    this.attack = null; this.hold = 0; this.attackBuffer.clear(); this.combo = 0; this.comboTime = 0;
+    this.player.texture = actorTexture(id);
+    this.player.sprite.setTexture(this.player.texture, "idle/0/0"); this.player.restart();
+    const keep = new Set(["blade", "hammer", "bow", id, ...Object.values(this.app.run?.loadout ?? {}), ...Object.values(this.app.store.data.loadout), ...Object.values(this.app.store.data.run?.loadout ?? {})]);
+    for (const other of WEAPON_IDS) if (!keep.has(other) && this.textures.exists(actorTexture(other))) this.textures.remove(actorTexture(other));
+    this.app.ui.hud(); this.app.ui.updateHUD();
+  }
+  switchWeapon(): void {
+    if (!this.canAct() || this.dashTime > 0 || (this.attack && !this.attack.cancellable)) return;
+    const loadout = this.app.run?.loadout ?? this.app.store.data.loadout;
+    const current = this.app.run?.weapon ?? this.app.weapon;
+    const next = loadout[WEAPONS[current].slot === "melee" ? "ranged" : "melee"];
+    if (!this.textures.exists(actorTexture(next))) return;
+    if (this.app.run) this.app.run.weapon = next;
+    this.app.weapon = next; this.app.store.data.equipped = next;
+    this.showWeapon(next); this.app.audio.play("ui"); this.app.saveCheckpoint();
+    this.effects.burst(this.pos, WEAPONS[next].color, 8, 40);
+  }
   canAct(): boolean {
     return (
       this.ready &&
       this.app.ui.screen === "play" &&
       !this.health.dead &&
       this.intro <= 0 &&
-      this.resurrectTime <= 0
+      this.resurrectTime <= 0 && !this.chestInteraction && !this.gateOpening
     );
   }
   consume(key: string): boolean {
@@ -261,12 +327,12 @@ export class World extends Phaser.Scene {
   maxHP(): number {
     return BALANCE.hp + (this.stats().hp ?? 0);
   }
-  stats(): Record<string, number> {
+  stats(weapon = this.app.run?.weapon ?? this.app.weapon): Record<string, number> {
     const stats = boonStats(this.app.run?.boons ?? []);
     for (const [key, value] of Object.entries(
       progressionStats(
         this.app.store.data,
-        this.app.run?.weapon ?? this.app.weapon,
+        weapon,
       ),
     ))
       stats[key] = (stats[key] ?? 0) + value;
@@ -284,6 +350,17 @@ export class World extends Phaser.Scene {
           : fallback;
   }
   clearRoom(): void {
+    this.app.ui.clearLoot();
+    this.spawnSerial = 0;
+    this.chestInteraction = null;
+    this.villagePath = []; this.villageTarget = null; this.villageHouses = [];
+    this.keyImage = null; this.gateOpening = 0;
+    this.environment = null; this.landscapeGround = null;
+    this.arrivals = [];
+    this.relays = [];
+    this.stageZones = [];
+    this.escortPath = [];
+    this.escortTravel = 0;
     this.app.ui.activeNpc = null;
     this.survivalSaveTimer = 0;
     this.attackBuffer.clear();
@@ -332,58 +409,27 @@ export class World extends Phaser.Scene {
     this.roomObjects.push(o);
     return o;
   }
-  enterHub(): void {
+  enterHub(recovery = false): void {
     this.clearRoom();
     this.isHub = true;
     this.app.audio.biome = -1;
     this.app.audio.combat = false;
-    this.layout = generateLayout("farol-v1");
-    // Open resident pads and connect each to the arrival gallery.
-    for (const npc of HUB_NPCS) {
-      for (let x = 3; x <= npc.x; x++)
-        for (const y of [9, 10]) this.layout.cells[y][x] = 1;
-      for (let y = Math.min(9, npc.y); y <= Math.max(9, npc.y); y++)
-        for (const x of [npc.x, npc.x + 1]) this.layout.cells[y][x] = 1;
-      for (let dy = -1; dy <= 1; dy++)
-        for (let dx = -1; dx <= 1; dx++)
-          this.layout.cells[npc.y + dy][npc.x + dx] = 1;
-    }
-    this.layout.props = this.layout.props.filter(
-      (p) =>
-        p.kind !== "tree" &&
-        p.kind !== "flower" &&
-        !HUB_NPCS.some(
-          (n) =>
-            distance(p, { x: (n.x + 0.5) * TILE, y: (n.y + 0.5) * TILE }) < 70,
-        ) &&
-        (!p.solid ||
-          !this.layout.cells[Math.floor(p.y / TILE)][Math.floor(p.x / TILE)]),
-    );
+    this.layout = generateVillage();
     this.pos = { ...this.layout.spawn };
+    if (recovery) { const n = HUB_NPCS.find(n => n.id === "salvia")!; this.pos = { x: (n.x + 1.1) * TILE, y: (n.y + .5) * TILE }; }
     this.health = new Vitality(this.maxHP());
     this.resurrectTime = this.app.store.data.deaths > 0 ? 1.2 : 0;
     this.elapsed = 0;
     this.buildEnvironment(0, true);
     this.player = new ActorVisual(
       this,
-      this.app.weapon === "blade" ? "eira" : `eira-${this.app.weapon}`,
+      actorTexture(this.app.weapon),
     );
     this.effects = new Effects(this, this.particleCount());
     this.objective = new Objective("eliminate");
     this.objective.state = "completed";
-    for (const npc of HUB_NPCS) {
-      this.spawnNPC(npc.id);
-      if (npc.station) {
-        const p = project({ x: (npc.x + 1.5) * TILE, y: (npc.y - 0.5) * TILE });
-        this.own(
-          this.add
-            .image(p.x, p.y, "props", npc.station)
-            .setOrigin(0.5, 0.9)
-            .setScale(0.8)
-            .setDepth(p.y),
-        );
-      }
-    }
+    for (const npc of HUB_NPCS) this.spawnNPC(npc.id);
+    if (recovery) this.app.ui.announcement("REFÚGIO DA CENTELHA", "CASA DE SÁLVIA · ÁREA DE UPGRADES", 3000);
     this.configureCamera();
     this.app.ui.hud();
   }
@@ -414,14 +460,16 @@ export class World extends Phaser.Scene {
     const npc = this.npcs.find((n) => n.id === id);
     return this.isHub && !!npc && distance(this.pos, npc.pos) < 76;
   }
-  enterRoom(): void {
+  enterRoom(resume = false): void {
     this.clearRoom();
     const run = this.app.run!;
     const node = run.nodes[run.current];
     this.isHub = false;
     this.roomRng = rng(node.seed);
     this.app.audio.biome = node.biome;
-    this.layout = generateLayout(node.seed, node.kind === "boss");
+    this.layout = generateStage(node.seed, node.kind === "boss", node.biome, node.id % 9);
+    const phase = phaseState(run);
+    if (phase.secretOpened) openSecret(this.stage);
     this.pos = { ...this.layout.spawn };
     this.health = new Vitality(this.maxHP());
     this.health.hp = Math.min(run.hp, this.health.max);
@@ -430,10 +478,12 @@ export class World extends Phaser.Scene {
     this.buildEnvironment(node.biome, false);
     this.player = new ActorVisual(
       this,
-      run.weapon === "blade" ? "eira" : `eira-${run.weapon}`,
+      actorTexture(run.weapon),
     );
     this.effects = new Effects(this, this.particleCount());
-    this.objective = new Objective(node.objective);
+    this.createHiddenKey();
+    const objectiveKind = this.stage.design.rule === "islands" ? "collect" : node.objective;
+    this.objective = new Objective(objectiveKind, ["eliminate", "escort"].includes(objectiveKind) ? undefined : objectiveKind === "defend" ? 55 : this.layout.objectives.length);
     this.objective.start();
     const restored = run.visited.includes(node.id);
     const peaceful = ["event", "shop", "explore", "reward", "secret"].includes(
@@ -450,17 +500,19 @@ export class World extends Phaser.Scene {
         2600,
       );
     } else if (!restored && !peaceful) {
-      this.spawnWave(node.kind === "elite" ? 6 : 3 + node.biome);
-      this.pendingWave = node.kind === "elite" ? 1 : 0;
+      this.spawnWave(node.kind === "elite" ? 5 : 3 + node.biome, this.stage.route[0], true);
+      this.stage.zones.forEach(p => this.spawnWave(2 + Math.min(2, node.biome), p, true));
+      this.pendingWave = 0;
       this.waveTimer =
         node.objective === "seal" || node.objective === "defend" ? 9 : 0;
     }
-    if (node.objective !== "eliminate") this.createMarkers(node.objective);
+    if (objectiveKind !== "eliminate") this.createMarkers(objectiveKind);
     else if (peaceful) {
       this.objective.target = 0;
       this.objective.progress = 0;
       this.objective.state = "completed";
     }
+    this.createRelays();
     if (restored) {
       this.objective.state = "completed";
       this.objective.progress = this.objective.target;
@@ -470,11 +522,17 @@ export class World extends Phaser.Scene {
         m.label.setText("✓");
         m.image.setAlpha(0.45);
       }
-      this.exit.setTint(0xcbffcf);
+      this.exit.setTint(phaseState(run).keyFound ? 0xcbffcf : 0xffffff);
+    if (phaseState(run).gateOpened) this.exit.setFrame("gate-open");
     }
-    if (!restored && node.objective === "escort")
-      this.escort = { x: 7 * TILE, y: 9.5 * TILE };
-    this.app.audio.combat = !peaceful;
+    if (!restored && objectiveKind === "escort") {
+      this.escort = { ...this.layout.spawn };
+      this.escortPath = findPath(this.layout, this.escort, this.layout.exit);
+      let from = this.escort;
+      this.escortLength = this.escortPath.reduce((n, p) => { const d = distance(from, p); from = p; return n + d; }, 0);
+    }
+    if (resume && run.checkpoint?.room === run.current) this.restoreCheckpoint(run.checkpoint);
+    this.app.audio.combat = !peaceful && !this.cleared;
     this.configureCamera();
     this.cameras.main.fadeIn(500, 5, 12, 18);
     this.app.ui.screen = "play";
@@ -484,14 +542,55 @@ export class World extends Phaser.Scene {
       `${BIOMES[node.biome].short.toUpperCase()} · CÂMARA ${(run.current % 9) + 1}`,
       2200,
     );
+    if (resume && this.rewardPending) this.app.ui.rewards();
     if (peaceful && !restored)
       this.time.delayedCall(600, () => {
         if (this.app.run !== run || this.app.run.current !== node.id) return;
         if (node.kind === "shop") this.app.ui.shop();
         else if (node.kind === "event") this.app.ui.event();
-        else if (node.kind === "reward") this.completeRoom();
+        else if (node.kind === "reward") this.app.ui.toast("Sintonize os marcos do santuário para restaurar a fase.");
         else this.app.ui.toast("Procure a memória junto às runas.");
       });
+  }
+  captureCheckpoint(): WorldCheckpoint {
+    const o = this.objective;
+    return {
+      version: 1, room: this.app.run!.current, pos: { ...this.pos }, facing: this.facing, elapsed: this.elapsed, cleared: this.cleared, rewardPending: this.rewardPending,
+      objective: { kind: o.kind, state: o.state, progress: o.progress, target: o.target, elapsed: o.elapsed, integrity: o.integrity, damageTaken: o.damageTaken, dashes: o.dashes },
+      enemies: this.enemies.map(e => ({ kind: e.kind, pos: { ...e.pos }, hp: e.health.hp, maxHP: e.health.max, boss: e.boss, phase: e.phase, lootKey: e.lootKey, attackCount: e.attackCount, burn: e.burn, slow: e.slow, burnDamage: e.burnDamage, slowAmount: e.slowAmount, lastHitWeapon: e.lastHitWeapon })),
+      markers: this.markers.map(m => ({ pos: { ...m.pos }, progress: m.progress, done: m.done, hp: m.hp })), relays: this.relays.map(m => m.progress), stageZones: [...this.stageZones],
+      pendingWave: this.pendingWave, waveTimer: this.waveTimer, spawnSerial: this.spawnSerial,
+      escort: this.escort ? { ...this.escort } : undefined, escortPath: this.escortPath.map(p => ({ ...p })), escortLength: this.escortLength, escortTravel: this.escortTravel,
+      arrivals: this.arrivals.map(a => ({ kind: a.kind, pos: { ...a.pos }, remaining: a.remaining })),
+    };
+  }
+  restoreCheckpoint(checkpoint: WorldCheckpoint): void {
+    if (walkable(this.layout, checkpoint.pos.x, checkpoint.pos.y, 14)) this.pos = { ...checkpoint.pos };
+    this.facing = checkpoint.facing; this.elapsed = checkpoint.elapsed; this.intro = 0; this.health.immune = .6;
+    this.enemies.forEach(e => { e.visual.destroy(); e.hpbar.destroy(); }); this.enemies = [];
+    for (const saved of checkpoint.enemies) {
+      if (!walkable(this.layout, saved.pos.x, saved.pos.y)) continue;
+      this.spawnEnemy(saved.kind, saved.pos, saved.boss);
+      const e = this.enemies[this.enemies.length - 1];
+      Object.assign(e, { phase: saved.phase, lootKey: saved.lootKey, attackCount: saved.attackCount, burn: saved.burn, slow: saved.slow, burnDamage: saved.burnDamage, slowAmount: saved.slowAmount, lastHitWeapon: saved.lastHitWeapon });
+      e.health.max = saved.maxHP; e.health.hp = saved.hp; e.health.dead = saved.hp <= 0;
+      e.state = e.health.dead ? "dead" : "recover"; e.timer = e.health.dead ? 0 : .6;
+      e.visual.update(e.pos, e.health.dead ? "death" : "idle", 0, 0); if (e.health.dead) e.visual.sprite.setVisible(false);
+    }
+    this.spawnSerial = Math.max(checkpoint.spawnSerial, ...this.enemies.map(e => Number(e.lootKey.slice(6)) + 1));
+    this.objective = new Objective(checkpoint.objective.kind, checkpoint.objective.target);
+    Object.assign(this.objective, checkpoint.objective);
+    checkpoint.markers.forEach((saved, i) => {
+      const m = this.markers[i]; if (!m) return;
+      Object.assign(m, saved, { pos: { ...saved.pos } }); const q = project(m.pos); m.image.setPosition(q.x, q.y); m.label.setPosition(q.x, q.y - 100);
+      if (m.done) { m.image.setTint(0xc3ffe0).setAlpha(.45); m.label.setText("✓"); }
+    });
+    checkpoint.relays.forEach((progress, i) => { if (this.relays[i]) this.relays[i].progress = progress; });
+    this.cleared = checkpoint.cleared || this.app.run!.visited.includes(this.app.run!.current); this.rewardPending = checkpoint.rewardPending && this.cleared;
+    this.stageZones = [...checkpoint.stageZones]; this.pendingWave = checkpoint.pendingWave; this.waveTimer = checkpoint.waveTimer;
+    this.escort = checkpoint.escort ? { ...checkpoint.escort } : null; this.escortPath = checkpoint.escortPath.map(p => ({ ...p })); this.escortLength = checkpoint.escortLength; this.escortTravel = checkpoint.escortTravel;
+    for (const a of checkpoint.arrivals) if (walkable(this.layout, a.pos.x, a.pos.y)) this.createArrival(a.kind, a.pos, a.remaining);
+    this.player.update(this.pos, "idle", this.facing, 0);
   }
   particleCount(): number {
     return this.app.store.data.settings.quality === "low"
@@ -502,58 +601,105 @@ export class World extends Phaser.Scene {
   }
   configureCamera(): void {
     const c = this.cameras.main;
-    c.setZoom(0.95);
-    c.centerOn(1055, 487);
-    c.setBounds(150, -130, 1650, 1270);
+    c.setZoom(this.isHub ? .8 : .95);
+    const p = project(this.pos); c.centerOn(p.x, p.y);
+    c.setBounds(-600, -350, 3600, 2700);
+  }
+  guideToNpc(id: NpcId): void {
+    if (!this.isHub || !this.ready || this.app.ui.screen !== "play" || this.health.dead) return;
+    const house = (this.layout as VillageLayout).houses.find(h => h.npc === id), npc = this.npcs.find(n => n.id === id);
+    if (!house || !npc) return;
+    this.villageTarget = id;
+    this.villagePath = [...findPath(this.layout, this.pos, house.door), ...findPath(this.layout, house.door, npc.pos)];
+    this.app.ui.toast(`Caminho para ${house.name}. WASD interrompe a caminhada.`);
+  }
+  guideToVillageGate(): void {
+    if (!this.isHub || !this.ready || this.app.ui.screen !== "play" || this.health.dead) return;
+    this.villageTarget = "gate"; this.villagePath = findPath(this.layout, this.pos, this.layout.exit);
+    this.app.ui.toast("Siga a rua até o portão leste. E inicia ou continua uma expedição.");
+  }
+  buildVillageEnvironment(): void {
+    const village = this.layout as VillageLayout, path = new Set(village.paths);
+    this.buildLandscape(0, true);
+    for (let y = 0; y < village.height; y++) for (let x = 0; x < village.width; x++) {
+      if (!village.cells[y][x]) continue;
+      const p = project({ x: (x + .5) * TILE, y: (y + .5) * TILE });
+      const road = path.has(y * village.width + x);
+      this.own(this.add.image(p.x, p.y, road ? "tiles0" : "scenery", road ? "village-road" : `ground-village-${(x * 7 + y * 3) % 3}`).setOrigin(.5, 59 / 96).setScale(.84).setDepth(-500));
+    }
+    const square = project(village.plaza), floor = this.own(this.add.graphics().setDepth(-400));
+    floor.lineStyle(3, 0xe2c485, .6); floor.strokeEllipse(square.x, square.y, 180, 88);
+    for (const h of village.houses) {
+      const q = project(h.center);
+      const body = this.own(this.add.image(q.x, q.y, "village", `house-${h.npc}`).setOrigin(.5, 242 / 352).setDepth(q.y - 35));
+      const roof = this.own(this.add.image(q.x, q.y, "village", `roof-${h.npc}`).setOrigin(.5, 242 / 352).setDepth(q.y + 115));
+      this.villageHouses.push({ npc: h.npc, body, roof });
+      const sign = project(h.door);
+      this.own(this.add.text(sign.x + 20, sign.y + 12, h.name, { fontFamily: "Segoe UI, sans-serif", fontSize: "16px", color: "#ffe6b4", stroke: "#26352d", strokeThickness: 4 }).setOrigin(.5).setDepth(sign.y + 50));
+    }
+    const beacon = project(village.lighthouse);
+    const tower = this.own(this.add.image(beacon.x, beacon.y, "village", "lighthouse").setOrigin(.5, 242 / 352).setDepth(beacon.y));
+    this.trackOccluder(tower, .22);
+    for (const p of village.props) {
+      const q = project(p), image = this.own(this.add.image(q.x, q.y, "props", p.kind).setOrigin(.5, .9).setScale(1.1).setDepth(q.y));
+      this.trackOccluder(image, .3); this.props.push({ data: p, image, hp: 999 });
+    }
+    const decorations: [number, number, string][] = [[15, 16, "well"], [21, 16, "bench"], [13, 12, "planter"], [24, 12, "planter"], [12, 19, "lamp"], [23, 19, "lamp"], [29, 14, "sign"], [11, 11, "lamp"], [21, 27, "planter"]];
+    for (const [x, y, frame] of decorations) {
+      const q = project({ x: (x + .5) * TILE, y: (y + .5) * TILE });
+      this.own(this.add.image(q.x, q.y, "props", frame).setOrigin(.5, .9).setScale(.8).setDepth(q.y));
+    }
+    const out = project(village.exit);
+    this.exit = this.own(this.add.image(out.x, out.y, "props", "gate-open").setOrigin(.5, .91).setScale(1.35).setDepth(out.y));
+    this.ambient = this.own(this.add.graphics().setDepth(1999));
+    this.telegraphs = this.own(this.add.graphics().setDepth(8));
+  }
+  createHiddenKey(): void {
+    const phase = phaseState(this.app.run!), hiding = this.stage.keyHiding, container = this.props[hiding.prop];
+    if (!container) return;
+    if (phase.claimed.includes(`prop:${hiding.prop}`) && !phase.keyFound) phase.keyRevealed = true;
+    if (!phase.keyRevealed) container.image.setFrame("key-cache");
+    if (phase.keyRevealed) { container.hp = 0; container.image.setVisible(false); }
+    const p = project(hiding.pos);
+    this.keyImage = this.own(this.add.image(p.x, p.y - 8, "props", "gate-key").setOrigin(.5, .9).setScale(.7).setDepth(p.y + 15).setVisible(!!phase.keyRevealed && !phase.keyFound));
+    if (phase.gateOpened) this.exit.setFrame("gate-open");
+  }
+  revealHiddenKey(): void {
+    if (!revealGateKey(this.app.run!)) return;
+    this.keyImage?.setVisible(true); this.effects.burst(this.stage.keyHiding.pos, 0xffdc83, 22, 80);
+    this.app.ui.toast("Uma chave de bronze estava escondida no nicho. Pressione E para recolher.");
+    this.app.audio.play("reward"); this.app.saveCheckpoint();
+  }
+  updateKeySearch(): void {
+    const phase = phaseState(this.app.run!);
+    if (phase.keyFound || distance(this.pos, this.stage.keyHiding.pos) > 65 || this.chestInteraction || this.gateOpening || !this.consume("E")) return;
+    if (!phase.keyRevealed) this.breakProp(this.stage.keyHiding.prop);
+    else if (collectGateKey(this.app.run!)) {
+      this.keyImage?.setVisible(false); if (this.cleared) this.exit.setTint(0xcbffcf); this.app.audio.play("reward");
+      this.app.ui.toast("Chave do portão encontrada. Cumpra os objetivos e leve-a até a saída.");
+      this.app.saveCheckpoint(); this.app.ui.updateHUD();
+    }
+  }
+  updateGate(dt: number): void {
+    if (!this.gateOpening) return;
+    this.gateOpening += dt;
+    this.exit.setFrame(`gate-open-${Math.min(7, Math.floor(this.gateOpening / .12))}`);
+    if (this.gateOpening >= 1.05) {
+      phaseState(this.app.run!).gateOpened = true;
+      this.gateOpening = 0; this.exit.setFrame("gate-open"); this.app.saveCheckpoint();
+      this.app.nextRoom();
+    }
+  }
+  buildLandscape(biome: number, hub: boolean): void {
+    const theme = environmentTheme(hub, biome);
+    this.environment = planEnvironment(this.layout, theme, hub ? "FAROL" : this.app.run!.nodes[this.app.run!.current].seed, hub ? [] : this.stage.secretCells);
+    this.landscapeGround = paintLandscape(this, this.layout, this.environment, o => this.own(o), image => this.trackOccluder(image, .32));
   }
   buildEnvironment(biome: number, hub: boolean): void {
+    if (hub) { this.buildVillageEnvironment(); return; }
     const b = BIOMES[biome],
       color = Phaser.Display.Color.HexStringToColor(b.color).color;
-    this.cameras.main.setBackgroundColor(hub ? "#0b1722" : b.dark);
-    const bg = this.own(
-      this.add
-        .image(1050, 430, "tear")
-        .setScale(1.2)
-        .setAlpha(hub ? 0.32 : 0.11)
-        .setDepth(-1000),
-    );
-    bg.setScrollFactor(0.8);
-    // Extrude only exposed tile edges, following the actual room contour.
-    const foundation = this.own(this.add.graphics().setDepth(-800));
-    for (let y = 0; y < this.layout.height; y++)
-      for (let x = 0; x < this.layout.width; x++) {
-        if (!this.layout.cells[y][x]) continue;
-        const bottom = project({ x: (x + 1) * TILE, y: (y + 1) * TILE });
-        for (const [exposed, point, shade] of [
-          [
-            !this.layout.cells[y + 1]?.[x],
-            { x: x * TILE, y: (y + 1) * TILE },
-            0x24353c,
-          ],
-          [
-            !this.layout.cells[y]?.[x + 1],
-            { x: (x + 1) * TILE, y: y * TILE },
-            0x15232d,
-          ],
-        ] as const) {
-          if (!exposed) continue;
-          const a = project(point);
-          foundation.fillStyle(shade, 1);
-          foundation.fillPoints(
-            [
-              new Phaser.Math.Vector2(a.x, a.y),
-              new Phaser.Math.Vector2(bottom.x, bottom.y),
-              new Phaser.Math.Vector2(bottom.x, bottom.y + 25),
-              new Phaser.Math.Vector2(a.x, a.y + 25),
-            ],
-            true,
-          );
-          foundation.lineStyle(1, color, 0.28);
-          foundation.lineBetween(a.x, a.y + 8, bottom.x, bottom.y + 8);
-          foundation.lineStyle(2, 0x080f1b, 1);
-          foundation.lineBetween(a.x, a.y + 25, bottom.x, bottom.y + 25);
-        }
-      }
+    this.buildLandscape(biome, false);
     for (let y = 0; y < this.layout.height; y++)
       for (let x = 0; x < this.layout.width; x++)
         if (this.layout.cells[y][x]) {
@@ -582,7 +728,7 @@ export class World extends Phaser.Scene {
         }
     // Central inlaid astrolabe, engraved onto the floor rather than a floating UI shape.
     const c = project({ x: 11.5 * TILE, y: 9.5 * TILE }),
-      ornament = this.own(this.add.graphics().setDepth(-400));
+      ornament = this.own(this.add.graphics().setDepth(-400).setVisible(!!this.layout.cells[9]?.[11]));
     ornament.lineStyle(
       1,
       Phaser.Display.Color.HexStringToColor(b.accent).color,
@@ -633,8 +779,17 @@ export class World extends Phaser.Scene {
       this.props.push({
         data: p,
         image,
-        hp: p.kind === "urn" ? 25 : p.kind === "flower" ? 12 : 999,
+        hp: ["urn", "crate", "barrel"].includes(p.kind) ? 25 : p.kind === "flower" ? 12 : p.kind === "secret-wall" ? 50 : 999,
       });
+      if (!hub && this.app.run) {
+        const phase = phaseState(this.app.run), index = this.props.length - 1;
+        if (phase.claimed.includes(`prop:${index}`)) {
+          this.props[index].hp = 0;
+          if (p.kind === "chest") image.setFrame("chest-open"); else image.setVisible(false);
+        }
+        if (p.kind === "secret-wall" && phase.secretOpened) image.setVisible(false);
+        if (p.kind === "chest" && this.stage.secretChest && distance(p, this.stage.secretChest) < 1 && !phase.secretOpened) image.setVisible(false);
+      }
     }
     for (const [x, y] of [
       [3, 3],
@@ -644,6 +799,7 @@ export class World extends Phaser.Scene {
       [11, 2],
       [11, 16],
     ]) {
+      if (!hub && !this.layout.cells[y]?.[x]) continue;
       const q = project({ x: (x + 0.5) * TILE, y: (y + 0.5) * TILE });
       const pillar = this.own(
         this.add
@@ -664,7 +820,7 @@ export class World extends Phaser.Scene {
     const entry = project(this.layout.spawn);
     this.own(
       this.add
-        .image(entry.x - 22, entry.y, "props", "portal")
+        .image(entry.x - 22, entry.y, "props", "gate-open")
         .setOrigin(0.5, 0.91)
         .setScale(1.1)
         .setAlpha(0.6)
@@ -673,18 +829,13 @@ export class World extends Phaser.Scene {
     const out = project(this.layout.exit);
     this.exit = this.own(
       this.add
-        .image(out.x, out.y, "props", "portal")
+        .image(out.x, out.y, "props", "gate-closed")
         .setOrigin(0.5, 0.91)
         .setScale(hub ? 1.55 : 1.2)
         .setDepth(out.y),
     );
-    this.tweens.add({
-      targets: this.exit,
-      alpha: { from: 0.65, to: 1 },
-      duration: 1700,
-      yoyo: true,
-      repeat: -1,
-    });
+    this.trackOccluder(this.exit, .35, [], .45);
+
     if (hub) {
       for (const p of [
         { x: 14 * TILE, y: 3 * TILE },
@@ -756,19 +907,179 @@ export class World extends Phaser.Scene {
     image: Phaser.GameObjects.Image,
     widthRatio: number,
     attachments: Phaser.GameObjects.Image[] = [],
+    blockedAlpha = .22,
   ): void {
     this.occluders.push({
       image,
       attachments,
       restAlpha: image.alpha,
+      blockedAlpha,
       halfWidth: image.displayWidth * widthRatio,
       height: image.displayHeight * 0.78,
     });
   }
+  collectLoot(packet: Loot, claim?: string): void {
+    if (!this.app.run) return;
+    const loot = grantLoot(this.app.store.data, this.app.run, packet, claim);
+    if (Object.keys(loot).length) this.app.ui.lootNotice(loot);
+    this.app.saveCheckpoint();
+  }
+  createRelays(): void {
+    const done = phaseState(this.app.run!).relays;
+    this.stage.relays.forEach((pos, i) => {
+      const q = project(pos), complete = done.includes(i) || this.app.run!.visited.includes(this.app.run!.current);
+      const image = this.own(this.add.image(q.x, q.y, "props", "obelisk").setOrigin(.5, .9).setScale(.65).setDepth(q.y));
+      const label = this.own(this.add.text(q.x, q.y - 90, complete ? "✓" : `MARCO ${i + 1} · E`, { fontFamily: "Segoe UI", fontSize: "15px", color: "#ffe6b0", stroke: "#14212b", strokeThickness: 4 }).setOrigin(.5).setDepth(q.y + 1));
+      if (complete) image.setTint(0x9bf5c6).setAlpha(.5);
+      this.relays.push({ pos, image, label, progress: 0, done: complete, hp: 100 });
+    });
+  }
+  revealSecret(): void {
+    const phase = phaseState(this.app.run!);
+    if (phase.secretOpened || !this.stage.secretDoor) return;
+    phase.secretOpened = true;
+    openSecret(this.stage);
+    const biome = this.app.run!.nodes[this.app.run!.current].biome;
+    for (const cell of this.stage.secretCells) {
+      const q = project({ x: (cell.x + .5) * TILE, y: (cell.y + .5) * TILE });
+      this.own(this.add.image(q.x, q.y, `tiles${biome}`, "floor/1").setOrigin(.5, 59 / 96).setScale(.84).setDepth(-500));
+    }
+    for (const p of this.props) {
+      if (p.data.kind === "secret-wall") { p.hp = 0; p.image.setVisible(false); }
+      if (p.data.kind === "chest" && this.stage.secretChest && distance(p.data, this.stage.secretChest) < 1) p.image.setVisible(true);
+    }
+    this.effects.burst(this.stage.secretDoor, 0xe2c38c, 30, 160);
+    this.app.ui.announcement("PASSAGEM SECRETA", "UM TESOURO ALÉM DA PEDRA", 2200);
+    this.app.saveCheckpoint();
+  }
+  breakProp(index: number): void {
+    const p = this.props[index];
+    if (!p || p.hp <= 0 || p.hp >= 999) return;
+    if (p.data.kind === "secret-wall") { this.revealSecret(); return; }
+    p.hp = 0; p.image.setVisible(false);
+    this.effects.burst(p.data, p.data.kind === "flower" ? 0xf3b391 : 0xcec6a0, 16);
+    const packets: Record<string, Loot> = { urn: { coins: 3, rawWater: 1 }, crate: { grain: 2, fiber: 2, iron: 1 }, barrel: { rawWater: 2, herb: 1, coins: 2 }, flower: { herb: 1 } };
+    this.collectLoot(packets[p.data.kind] ?? {}, `prop:${index}`);
+    if (index === this.stage.keyHiding.prop) this.revealHiddenKey();
+    if (p.data.kind === "flower") {
+      const phase = phaseState(this.app.run!);
+      this.stage.challenge.hazards.forEach((pos, i) => { if (distance(pos, p.data) < 2 && !phase.claimed.includes(`hazard:${i}`)) phase.claimed.push(`hazard:${i}`); });
+      this.app.saveCheckpoint();
+    }
+    if (p.data.kind === "flower") for (const enemy of this.enemies)
+      if (!enemy.health.dead && distance(enemy.pos, p.data) < 150) this.applyPlayerHit(enemy, 42);
+  }
+  updateExploration(dt: number): void {
+    const run = this.app.run!, phase = phaseState(run);
+    this.updateKeySearch();
+    phase.explored = exploreCells(this.layout, this.pos, phase.explored);
+    this.relays.forEach((marker, i) => {
+      const block = this.relayBlock(i);
+      if (!marker.done && block && distance(this.pos, marker.pos) < 65) { marker.label.setText(block); if (this.stage.design.rule === "timing") marker.progress = 0; }
+      if (!block && !this.chestInteraction && !marker.done && distance(this.pos, marker.pos) < 65 && this.keys.E.isDown) {
+        marker.progress += dt;
+        marker.label.setText(`MARCO ${i + 1} · ${Math.floor(Math.min(1, marker.progress / 1.4) * 100)}%`);
+        if (marker.progress >= 1.4) {
+          marker.done = true; marker.label.setText("✓"); marker.image.setTint(0x9bf5c6).setAlpha(.5);
+          phase.relays.push(i);
+          if (this.stage.design.rule === "rest") { this.health.heal(12); this.needs.cold = Math.max(0, this.needs.cold - 20); this.effects.burst(marker.pos, 0xffe2a3, 20, 70); }
+          this.app.saveCheckpoint(); this.app.audio.play("reward");
+        }
+      }
+    });
+    const chest = this.props.findIndex((p, i) => p.data.kind === "chest" && p.image.visible && distance(p.data, this.pos) < 65 && !phase.claimed.includes(`prop:${i}`));
+    if (chest >= 0 && !this.chestInteraction && !this.attack && this.dashTime <= 0 && this.consume("E")) {
+      const p = this.props[chest];
+      const a = Math.atan2(p.data.y - this.pos.y, p.data.x - this.pos.x);
+      const target = { x: p.data.x - Math.cos(a) * 34, y: p.data.y - Math.sin(a) * 34 };
+      this.chestInteraction = { index: chest, time: 0, from: { ...this.pos }, target: walkable(this.layout, target.x, target.y, 14) ? target : { ...this.pos }, awarded: false };
+      this.facing = a; this.hold = 0; this.attackBuffer.clear(); this.player.restart();
+      this.app.audio.play("ui");
+    }
+    if (this.stage.secretDoor && !phase.secretOpened && distance(this.pos, this.stage.secretDoor) < 75 && this.consume("E")) this.revealSecret();
+  }
+  relayBlock(index: number): string {
+    const rule = this.stage.design.rule;
+    if (rule === "ordered" || rule === "paired") {
+      const order = rule === "paired" ? [0, 2, 1, 3] : [0, 1, 2, 3];
+      const next = order.find(i => !this.relays[i]?.done);
+      if (next !== undefined && index !== next) return `ATIVE O MARCO ${next + 1} PRIMEIRO`;
+    }
+    if (rule === "guarded" && this.enemies.some(e => !e.health.dead && distance(e.pos, this.relays[index].pos) < 160)) return "DERROTE OS GUARDAS";
+    if (rule === "timing" && ((this.elapsed + this.stage.challenge.offset + index * 1.1) % this.stage.challenge.period) >= 2) return "AGUARDE O INTERVALO SEGURO";
+    return "";
+  }
+  treasureCount(): number {
+    if (!this.app.run) return 0;
+    const phase = phaseState(this.app.run);
+    return this.props.filter((p, i) => p.data.kind === "chest" && phase.claimed.includes(`prop:${i}`)).length;
+  }
+  stageRequirement(): boolean { return this.stage.design.rule !== "treasure" || this.treasureCount() >= 2; }
+  stageHint(): string { return this.stage.design.rule === "treasure" ? `Baús abertos: ${this.treasureCount()}/2` : this.stage.design.brief; }
+  cancelChest(): void {
+    const opening = this.chestInteraction;
+    if (!opening) return;
+    if (!opening.awarded) this.props[opening.index]?.image.setFrame("chest");
+    this.chestInteraction = null; this.player.restart();
+  }
+  updateChest(dt: number): void {
+    const opening = this.chestInteraction; if (!opening) return;
+    opening.time += dt;
+    const p = this.props[opening.index];
+    if (!p?.image.active) { this.chestInteraction = null; return; }
+    const approach = Math.min(1, opening.time / .25), eased = 1 - (1 - approach) ** 2;
+    this.pos.x = opening.from.x + (opening.target.x - opening.from.x) * eased;
+    this.pos.y = opening.from.y + (opening.target.y - opening.from.y) * eased;
+    const lid = Math.max(0, Math.min(7, Math.floor((opening.time - .55) / .085)));
+    const frame = `chest-open-${lid}`;
+    if (this.textures.get("props").has(frame)) p.image.setFrame(frame);
+    if (opening.time >= .93 && !opening.awarded) {
+      opening.awarded = true; p.hp = 0;
+      const secret = this.stage.secretChest && distance(p.data, this.stage.secretChest) < 1;
+      this.collectLoot(secret ? { echoes: 5, glass: 4, ember: 2, hide: 2, stew: 1 } : { coins: 8, iron: 2, grain: 2, rawWater: 2, fiber: 2 }, `prop:${opening.index}`);
+      this.effects.burst(p.data, 0xffd683, 30, 100); this.app.audio.play("reward");
+    }
+    if (opening.time > 1.4) { p.image.setFrame("chest-open"); this.chestInteraction = null; }
+  }
+  explorationPrompt(): void {
+    const phase = phaseState(this.app.run!);
+    if (!phase.keyFound && distance(this.pos, this.stage.keyHiding.pos) < 65) { this.app.ui.interaction("E", phase.keyRevealed ? "RECOLHER CHAVE DO PORTÃO" : "INVESTIGAR NICHO MARCADO"); return; }
+    if (this.chestInteraction) { this.app.ui.interaction("ESPAÇO", this.chestInteraction.time < .65 ? "ABRINDO FECHADURA · CANCELAR" : "RECOLHENDO O TESOURO"); return; }
+    if (this.props.some((p, i) => p.data.kind === "chest" && p.image.visible && distance(p.data, this.pos) < 65 && !phase.claimed.includes(`prop:${i}`)))
+      this.app.ui.interaction("E", "ABRIR BAÚ");
+    else if (this.stage.secretDoor && !phase.secretOpened && distance(this.pos, this.stage.secretDoor) < 75)
+      this.app.ui.interaction("E", "INVESTIGAR PAREDE RACHADA");
+    else if (this.relays.some((m) => !m.done && distance(m.pos, this.pos) < 65)) {
+      const index = this.relays.findIndex(m => !m.done && distance(m.pos, this.pos) < 65);
+      this.app.ui.interaction("E", this.relayBlock(index) || "SEGURAR PARA SINTONIZAR O MARCO");
+    }
+  }
+  navigationGoal(): { pos: Vec; label: string } {
+    if (!this.app.run) return { pos: this.layout.exit, label: "Volte ao Farol" };
+    if (this.stage.design.rule === "treasure" && this.treasureCount() < 2) {
+      const phase = phaseState(this.app.run!);
+      const chest = this.props.filter((p, i) => p.data.kind === "chest" && p.image.visible && !phase.claimed.includes(`prop:${i}`)).sort((a, b) => distance(this.pos, a.data) - distance(this.pos, b.data))[0];
+      if (chest) return { pos: chest.data, label: `Abra dois baús (${this.treasureCount()}/2)` };
+    }
+    const order = this.stage.design.rule === "paired" ? [0, 2, 1, 3] : [0, 1, 2, 3];
+    const relay = order.map(i => this.relays[i]).find(m => m && !m.done);
+    const activeMarker = this.objective.state !== "completed" ? this.markers.find(m => !m.done) : undefined;
+    if (activeMarker && this.objective.kind !== "escort" && (!relay || distance(this.pos, activeMarker.pos) < distance(this.pos, relay.pos)))
+      return { pos: activeMarker.pos, label: this.objective.definition.title };
+    if (relay) return { pos: relay.pos, label: `Marco ${this.relays.indexOf(relay) + 1} · segure E` };
+    if (this.objective.kind === "escort" && this.escort && this.objective.state !== "completed") return { pos: this.escort, label: "Acompanhe o Eco até a saída" };
+    const marker = activeMarker;
+    if (marker) return { pos: marker.pos, label: this.objective.definition.title };
+    const enemy = this.enemies.find((e) => !e.health.dead);
+    if (enemy) return { pos: enemy.pos, label: "Derrote os guardiões restantes" };
+    const phase = phaseState(this.app.run!);
+    if (this.cleared && !phase.keyFound) return { pos: phase.keyRevealed ? this.stage.keyHiding.pos : this.stage.keyHiding.search, label: phase.keyRevealed ? "Recolha a chave revelada" : this.stage.keyHiding.hint };
+    return { pos: this.layout.exit, label: this.cleared ? "Portão de saída" : this.objective.definition.title };
+  }
   createMarkers(kind: string): void {
     const positions =
       kind === "escort" || kind === "defend"
-        ? [{ x: 11.5 * TILE, y: 9.5 * TILE }]
+        ? [kind === "escort" ? this.layout.spawn : this.stage.route[2] ?? this.layout.objectives[0]]
         : this.layout.objectives;
     positions.forEach((p, i) => {
       const q = project(p);
@@ -785,7 +1096,7 @@ export class World extends Phaser.Scene {
             q.x,
             q.y - 116,
             kind === "puzzle"
-              ? ["I", "II", "III"][i]
+              ? ["I", "II", "III", "IV", "V"][i]
               : kind === "chains"
                 ? "⛓"
                 : kind === "defend"
@@ -814,7 +1125,7 @@ export class World extends Phaser.Scene {
       });
     });
   }
-  spawnWave(count: number): void {
+  spawnWave(count: number, center?: Vec, placed = false): void {
     const b = this.app.run!.nodes[this.app.run!.current].biome;
     const roster: EnemyKind[][] = [
       ["swordsman", "archer", "hound"],
@@ -824,14 +1135,82 @@ export class World extends Phaser.Scene {
     ];
     for (let i = 0; i < count; i++)
       if (
-        this.enemies.filter((e) => !e.health.dead).length < BALANCE.enemyCap
+        (placed || this.enemies.filter((e) => !e.health.dead).length + this.arrivals.length < BALANCE.enemyCap)
       ) {
-        const p = this.layout.enemies[i % this.layout.enemies.length];
-        this.spawnEnemy(pick(this.roomRng, roster[b]), {
-          x: p.x + (i > 6 ? 15 : 0),
-          y: p.y,
-        });
+        const p = center ? { x: center.x + (i % 3 - 1) * TILE, y: center.y + (i % 2) * TILE } : this.layout.enemies[i % this.layout.enemies.length];
+        const kind = pick(this.roomRng, roster[b]);
+        if (placed) this.spawnEnemy(kind, p); else this.queueEnemy(kind, p);
       }
+  }
+  queueEnemy(kind: EnemyKind, preferred: Vec): void {
+    if (this.arrivals.length >= 6 || this.cleared) return;
+    const points = this.stage.entrances?.length ? this.stage.entrances : this.layout.enemies;
+    const safe = points.filter(p => distance(p, this.pos) >= 155 && walkable(this.layout, p.x, p.y, 14));
+    const pos = safe.sort((a, b) => distance(a, preferred) - distance(b, preferred))[0];
+    if (!pos) return;
+    this.createArrival(kind, pos, 2);
+  }
+  createArrival(kind: EnemyKind, pos: Vec, remaining: number): void {
+    const q = project(pos), image = this.own(this.add.image(q.x, q.y, "props", "gate-closed").setOrigin(.5, .9).setScale(.55).setAlpha(.25).setDepth(q.y));
+    const label = this.own(this.add.text(q.x, q.y - 90, "REFORÇO · 2s", { fontFamily: "Segoe UI, sans-serif", fontSize: "15px", color: "#ffe3a1", stroke: "#15202b", strokeThickness: 4 }).setOrigin(.5).setDepth(q.y + 1));
+    this.arrivals.push({ kind, pos: { ...pos }, remaining, image, label });
+  }
+  updateArrivals(dt: number): void {
+    for (const arrival of this.arrivals) {
+      arrival.remaining -= dt;
+      arrival.image.setAlpha(.45 + Math.sin(this.elapsed * 12) * .2).setFrame(`gate-open-${Math.min(7, Math.floor((2 - arrival.remaining) * 4))}`);
+      arrival.label.setText(`REFORÇO · ${Math.max(0, arrival.remaining).toFixed(1)}s`);
+      if (arrival.remaining <= 0) {
+        this.spawnEnemy(arrival.kind, arrival.pos);
+        const e = this.enemies[this.enemies.length - 1]; e.state = "recover"; e.timer = .7;
+        e.visual.update(e.pos, "idle", 0, 0); e.visual.sprite.setAlpha(.4);
+        this.effects.burst(arrival.pos, 0xb6a1ff, 20, 70);
+        arrival.image.destroy(); arrival.label.destroy();
+      }
+    }
+    this.arrivals = this.arrivals.filter(a => a.remaining > 0);
+  }
+  hazardActive(i: number): boolean {
+    if (!this.app.run || this.isHub) return false;
+    const c = this.stage.challenge;
+    const phase = phaseState(this.app.run!);
+    return !phase.claimed.includes(`hazard:${i}`) && !(c.kind === "vents" && phase.relays.includes(i));
+  }
+  terrainSpeed(): number {
+    if (this.isHub || this.cleared) return 1;
+    const c = this.stage.challenge;
+    if (c.kind !== "thorns" && c.kind !== "tide") return 1;
+    return c.hazards.some((p, i) => { const cycle = (this.elapsed + c.offset + i * 1.1) % c.period; return this.hazardActive(i) && cycle >= 3.2 && cycle < 4.5 && distance(this.pos, p) < 48; }) ? c.kind === "tide" ? .55 : .65 : 1;
+  }
+  updateStageChallenge(dt: number): void {
+    const challenge = this.stage.challenge;
+    if (!challenge || this.cleared) return;
+    challenge.hazards.forEach((pos, i) => {
+      if (!this.hazardActive(i)) return;
+      const phase = (this.elapsed + challenge.offset + i * 1.1) % challenge.period;
+      const warning = phase >= 2 && phase < 3.2, active = phase >= 3.2 && phase < 4.5;
+      const color = challenge.kind === "vents" ? 0xffa06a : challenge.kind === "tide" ? 0x91cfff : challenge.kind === "thorns" ? 0x98d8a0 : 0xd8b0ff;
+      const q = project(pos);
+      this.telegraphs.lineStyle(warning ? 3 : 2, color, active ? .95 : warning ? .55 + Math.sin(this.elapsed * 16) * .25 : .2);
+      if (challenge.kind === "eclipse") {
+        this.telegraphs.lineStyle(active ? 14 : 3, color, active ? .7 : warning ? .65 : .15);
+        for (const axis of [0, 1]) {
+          const start = project({ x: pos.x - (axis ? 0 : 96), y: pos.y - (axis ? 96 : 0) });
+          const end = project({ x: pos.x + (axis ? 0 : 96), y: pos.y + (axis ? 96 : 0) });
+          this.telegraphs.lineBetween(start.x, start.y, end.x, end.y);
+        }
+      } else this.telegraphs.strokeEllipse(q.x, q.y, 104, 54);
+      if (active) {
+        this.telegraphs.fillStyle(color, .25); if (challenge.kind !== "eclipse") this.telegraphs.fillEllipse(q.x, q.y, 104, 54);
+        if (Math.random() < dt * 12) this.effects.burst(pos, color, 2, 40);
+        const dx = Math.abs(this.pos.x - pos.x), dy = Math.abs(this.pos.y - pos.y);
+        const inside = challenge.kind === "eclipse" ? (dx < 18 && dy < 96) || (dy < 18 && dx < 96) : distance(this.pos, pos) < 48;
+        if (inside && this.dashTime <= 0) {
+          if (challenge.kind === "tide") this.needs.cold = Math.min(100, this.needs.cold + dt * 3);
+          this.takeDamage(challenge.kind === "eclipse" ? 18 : challenge.kind === "vents" ? 14 : challenge.kind === "tide" ? 5 : 8);
+        }
+      }
+    });
   }
   spawnEnemy(kind: EnemyKind, pos: Vec, boss = false): void {
     const b = this.app.run?.nodes[this.app.run.current].biome ?? 0,
@@ -840,6 +1219,7 @@ export class World extends Phaser.Scene {
     const health = new Vitality(hp);
     this.enemies.push({
       id: this.id++,
+      lootKey: `enemy:${this.spawnSerial++}`,
       kind,
       pos: { ...pos },
       health,
@@ -854,18 +1234,23 @@ export class World extends Phaser.Scene {
       phase: 1,
       burn: 0,
       slow: 0,
+      burnDamage: 0,
+      slowAmount: 0,
       hpbar: this.add.graphics().setDepth(1700),
       target: { ...this.pos },
       attackResolved: false,
     });
   }
+  canMoveTo(x: number, y: number, radius = 14): boolean {
+    return walkable(this.layout, x, y, radius) && (this.isHub || !gateCollides(this.layout.exit, { x, y }, radius, !!phaseState(this.app.run!).gateOpened));
+  }
   move(p: Vec, dx: number, dy: number, radius = 14): void {
     const max = Math.max(Math.abs(dx), Math.abs(dy)),
       steps = Math.max(1, Math.ceil(max / 8));
     for (let i = 0; i < steps; i++) {
-      if (walkable(this.layout, p.x + dx / steps, p.y, radius))
+      if (this.canMoveTo(p.x + dx / steps, p.y, radius))
         p.x += dx / steps;
-      if (walkable(this.layout, p.x, p.y + dy / steps, radius))
+      if (this.canMoveTo(p.x, p.y + dy / steps, radius))
         p.y += dy / steps;
     }
   }
@@ -907,7 +1292,7 @@ export class World extends Phaser.Scene {
     this.chargeUsed = charged;
     this.player.restart();
     this.app.audio.play(
-      weapon === "hammer" ? "hammer" : weapon === "bow" ? "bow" : "slash",
+      w.family === "hammer" ? "hammer" : w.slot === "ranged" ? "bow" : "slash",
     );
   }
   specialAttack(): void {
@@ -950,9 +1335,10 @@ export class World extends Phaser.Scene {
     s.active = true;
     s.pos = { ...pos };
     s.vel = { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed };
-    s.life = 3;
+    s.life = friendly && this.app.run ? WEAPONS[this.app.run.weapon].range / speed : 3;
     s.damage = amount;
     s.friendly = friendly;
+    s.weapon = friendly ? this.app.run?.weapon : undefined;
     s.pierce = pierce;
     s.hit.clear();
     s.image
@@ -961,20 +1347,21 @@ export class World extends Phaser.Scene {
       .setScale(friendly ? 0.9 : 1.05)
       .setBlendMode(Phaser.BlendModes.ADD);
   }
-  applyPlayerHit(e: Enemy, amount: number, crit = false): void {
+  applyPlayerHit(e: Enemy, amount: number, crit = false, weapon = this.app.run!.weapon): void {
     if (e.health.dead) return;
-    const stats = this.stats(),
+    const stats = this.stats(weapon),
       actual =
         amount *
         (1 + (stats.echo ?? 0)) *
         (e.health.hp / e.health.max < 0.35 ? 1 + (stats.execution ?? 0) : 1);
+    e.lastHitWeapon = weapon;
     e.health.hp = Math.max(0, e.health.hp - actual);
     e.health.dead = e.health.hp === 0;
-    e.burn = stats.burn ? 3 : 0;
-    e.slow = stats.slow ? 2 : 0;
+    if (stats.burn) { e.burn = 3; e.burnDamage = stats.burn; }
+    if (stats.slow) { e.slow = 2; e.slowAmount = stats.slow; }
     if (!e.boss) {
       e.state = "stunned";
-      e.timer = this.app.run!.weapon === "hammer" ? 0.6 : 0.2;
+      e.timer = WEAPONS[this.app.run!.weapon].family === "hammer" ? 0.6 : 0.2;
       this.move(e.pos, Math.cos(this.facing) * 15, Math.sin(this.facing) * 15);
     }
     e.visual.sprite.setTintFill(0xf2fff4);
@@ -1009,8 +1396,15 @@ export class World extends Phaser.Scene {
     const run = this.app.run!;
     const stats = this.stats();
     run.kills++;
+    const phase = phaseState(run), xpKey = `xp:${e.lootKey}`;
+    if (e.lastHitWeapon && !phase.claimed.includes(xpKey)) {
+      phase.claimed.push(xpKey);
+      const xp = e.boss ? 70 : e.kind === "elite" ? 20 : 10 + run.nodes[run.current].biome * 2;
+      awardWeaponXP(this.app.store.data, e.lastHitWeapon, xp);
+      this.app.ui.weaponExperience(e.lastHitWeapon, xp);
+    }
     this.health.heal(stats.killHeal ?? 0);
-    run.coins += 5 + (stats.gold ?? 0);
+    this.collectLoot({ coins: 5 + (stats.gold ?? 0) }, e.lootKey);
     this.ultimate = Math.min(
       100,
       this.ultimate + 8 * (1 + (stats.charge ?? 0)),
@@ -1028,7 +1422,7 @@ export class World extends Phaser.Scene {
       if (!this.app.store.data.bosses.includes(b))
         this.app.store.data.bosses.push(b);
       this.app.remember(["garden", "forge", "archive", "regent"][b]);
-      this.app.store.data.echoes += 15 + b * 5;
+      this.collectLoot({ echoes: 15 + b * 5 }, `boss:${b}`);
       this.app.store.write();
       this.cameras.main.flash(300, 130, 210, 181);
       this.app.ui.announcement("FRAGMENTO RECUPERADO", BIOMES[b].boss, 3000);
@@ -1065,6 +1459,7 @@ export class World extends Phaser.Scene {
       amount * (environment ? 1 : 1 - Math.min(0.7, stats.armor ?? 0)),
     );
     if (!this.health.hit(value, BALANCE.invulnerability, environment)) return;
+    this.cancelChest();
     this.hurtTime = 0.24;
     this.objective.damageTaken += value;
     this.effects.burst(this.pos, 0xff968b, 12, 130);
@@ -1150,6 +1545,10 @@ export class World extends Phaser.Scene {
     );
     if (exposureDamage) this.takeDamage(exposureDamage, true);
     if (this.health.dead) return;
+    if (this.chestInteraction && this.actions.has("SPACE")) this.cancelChest();
+    this.updateChest(dt);
+    this.updateGate(dt);
+    if (this.consume("F")) this.switchWeapon();
     if (this.consume("R"))
       this.app.consume(
         this.app.store.data.provisions.ration > 0 ? "ration" : "stew",
@@ -1203,7 +1602,7 @@ export class World extends Phaser.Scene {
     ) {
       for (const e of this.enemies)
         if (!e.health.dead && distance(e.pos, this.pos) < 210) {
-          e.slow = 5;
+          e.slow = 5; e.slowAmount = .35;
           this.applyPlayerHit(e, 20 * (1 + (stats.damage ?? 0)));
         }
       this.effects.burst(this.pos, 0xbdb2ff, 35, 220);
@@ -1236,12 +1635,13 @@ export class World extends Phaser.Scene {
       const sx = (this.keys.D.isDown ? 1 : 0) - (this.keys.A.isDown ? 1 : 0),
         sy = (this.keys.S.isDown ? 1 : 0) - (this.keys.W.isDown ? 1 : 0);
       if (sx || sy) {
+        this.villagePath = []; this.villageTarget = null;
         const v = unproject({ x: 960 + sx, y: 40 + sy }),
           len = Math.hypot(v.x, v.y),
           speed =
             BALANCE.speed *
             (1 + (stats.speed ?? 0)) *
-            this.needsEffects.speed *
+            this.needsEffects.speed * this.terrainSpeed() *
             (this.attack?.active ? 0.5 : 1);
         this.move(this.pos, (v.x / len) * speed * dt, (v.y / len) * speed * dt);
         moving = true;
@@ -1251,6 +1651,11 @@ export class World extends Phaser.Scene {
           this.stepTime = 0;
           this.app.audio.play("step");
         }
+      } else if (this.isHub && this.villagePath.length) {
+        const next = this.villagePath[0], d = distance(this.pos, next), step = Math.min(d, BALANCE.speed * dt);
+        if (d > 0) { this.facing = Math.atan2(next.y - this.pos.y, next.x - this.pos.x); this.move(this.pos, (next.x - this.pos.x) / d * step, (next.y - this.pos.y) / d * step); moving = true; }
+        if (d <= step + 3) this.villagePath.shift();
+        if (!this.villagePath.length) { this.villageTarget = null; this.app.ui.toast("Você chegou. Pressione E para conversar."); }
       }
     }
     this.telegraphs.clear();
@@ -1284,7 +1689,7 @@ export class World extends Phaser.Scene {
             ? "dash"
             : this.attack
               ? this.attack.style
-              : interacting
+              : interacting || this.chestInteraction || this.gateOpening
                 ? "interact"
                 : moving
                   ? "run"
@@ -1294,7 +1699,7 @@ export class World extends Phaser.Scene {
       playerState,
       this.attack?.angle ?? this.facing,
       dt,
-      playerState === this.attack?.style ? this.attack.frame : undefined,
+      playerState === this.attack?.style ? this.attack.frame : this.chestInteraction ? Math.min(HERO_FRAMES.interact - 1, Math.floor(this.chestInteraction.time / 1.4 * HERO_FRAMES.interact)) : undefined,
     );
     this.player.sprite.setAlpha(
       this.health.immune > 0 && this.dashTime <= 0
@@ -1302,26 +1707,28 @@ export class World extends Phaser.Scene {
         : 1,
     );
     if (!this.isHub && this.intro <= 0) {
+      this.updateArrivals(dt);
       this.updateEnemies(dt);
       this.updateShots(dt);
       this.updateObjectives(dt);
       this.updateDangers(dt);
+      this.updateStageChallenge(dt);
       if (stats.regen) this.health.heal(stats.regen * dt);
     }
     this.effects.update(dt);
     this.idleDecor(dt);
     if (this.isHub) {
       this.updateHubInteraction();
-    } else if (
-      this.cleared &&
-      distance(this.pos, this.layout.exit) < 95 &&
-      this.consume("E")
-    )
-      this.app.nextRoom();
+    } else if (!this.gateOpening && distance(this.pos, this.layout.exit) < 95 && this.consume("E")) {
+      const reason = gateBlock(this.app.run!, this.cleared, this.rewardPending);
+      if (reason) this.app.ui.toast(reason);
+      else if (phaseState(this.app.run!).gateOpened) this.app.nextRoom();
+      else { this.gateOpening = .001; this.facing = Math.atan2(this.layout.exit.y - this.pos.y, this.layout.exit.x - this.pos.x); this.app.audio.play("hammer"); }
+    }
     const pp = project(this.pos),
       camera = this.cameras.main,
-      centerX = 1050 + (pp.x - 1050) * 0.3,
-      centerY = 480 + (pp.y - 480) * 0.3;
+      centerX = pp.x,
+      centerY = pp.y;
     camera.scrollX = Phaser.Math.Linear(
       camera.scrollX,
       centerX - camera.width / 2 / camera.zoom,
@@ -1358,28 +1765,29 @@ export class World extends Phaser.Scene {
       a.hit.add(-1);
       this.effects.burst(
         this.pos,
-        this.attackTint(run.weapon === "hammer" ? 0xffcb88 : 0xb6ffe1),
+        this.attackTint(w.family === "hammer" ? 0xffcb88 : 0xb6ffe1),
         8,
         150,
         a.angle,
       );
-      if (run.weapon === "bow") {
+      if (w.slot === "ranged") {
         for (const offset of isSpecial
           ? [-0.24, 0, 0.24]
           : a.style === "charged"
             ? [0]
-            : move.arrows)
+            : w.spread.length > 1 ? w.spread : move.arrows)
           this.fire(
             this.pos,
             a.angle + offset,
-            640,
+            w.projectileSpeed,
             base,
             true,
-            (stats.pierce ?? 0) + (a.style === "charged" ? 2 : move.pierce),
+            (stats.pierce ?? 0) + w.pierce + (a.style === "charged" ? 2 : move.pierce),
+            w.color,
           );
       }
     }
-    if (run.weapon !== "bow")
+    if (w.slot !== "ranged")
       for (const e of this.enemies)
         if (
           !a.hit.has(e.id) &&
@@ -1392,7 +1800,7 @@ export class World extends Phaser.Scene {
                 a.angle,
                 range,
                 a.style === "charged"
-                  ? run.weapon === "hammer"
+                  ? w.family === "hammer"
                     ? 2
                     : 1.5
                   : move.arc,
@@ -1411,6 +1819,7 @@ export class World extends Phaser.Scene {
       const m = this.markers[i];
       if (
         this.objective.kind === "chains" &&
+        w.slot !== "ranged" &&
         !m.done &&
         !a.hit.has(-10 - i) &&
         inArc(this.pos, m.pos, a.angle, range, 1.5)
@@ -1421,25 +1830,13 @@ export class World extends Phaser.Scene {
         if (m.hp <= 0) this.finishMarker(m);
       }
     }
-    for (const p of this.props)
+    if (w.slot !== "ranged") for (const [index, p] of this.props.entries())
       if (
         p.hp < 999 &&
         p.hp > 0 &&
         inArc(this.pos, p.data, a.angle, range, 1.4)
       ) {
-        p.hp = 0;
-        p.image.setVisible(false);
-        this.effects.burst(
-          p.data,
-          p.data.kind === "flower" ? 0xf3b391 : 0xcec6a0,
-          16,
-        );
-        run.coins += 3;
-        if (p.data.kind === "flower") {
-          for (const e of this.enemies)
-            if (!e.health.dead && distance(e.pos, p.data) < 150)
-              this.applyPlayerHit(e, 42);
-        }
+        this.breakProp(index);
       }
     // A luminous arc is drawn only during the same active frames as the hitbox.
     const q = project(this.pos),
@@ -1447,7 +1844,7 @@ export class World extends Phaser.Scene {
         x: this.pos.x + Math.cos(a.angle) * range,
         y: this.pos.y + Math.sin(a.angle) * range,
       });
-    if (run.weapon === "bow") return;
+    if (w.slot === "ranged") return;
     if (a.style === "attack3" && run.weapon === "blade") {
       this.telegraphs.lineStyle(5, this.attackTint(0xc0f3d5), 0.75);
       this.telegraphs.lineBetween(q.x, q.y - 28, end.x, end.y - 28);
@@ -1460,7 +1857,7 @@ export class World extends Phaser.Scene {
         : move.arc;
     this.telegraphs.lineStyle(
       isSpecial ? 10 : 5,
-      this.attackTint(run.weapon === "hammer" ? 0xffd598 : 0xbcffe3),
+      this.attackTint(w.family === "hammer" ? 0xffd598 : 0xbcffe3),
       0.65,
     );
     this.telegraphs.beginPath();
@@ -1513,7 +1910,7 @@ export class World extends Phaser.Scene {
       }
       if (e.burn > 0) {
         if (Math.random() < dt * 8) this.effects.burst(e.pos, 0xffad72, 1, 24);
-        e.health.hp -= this.stats().burn * dt;
+        e.health.hp -= e.burnDamage * dt;
         if (e.health.hp <= 0) {
           e.health.dead = true;
           this.killEnemy(e);
@@ -1521,6 +1918,9 @@ export class World extends Phaser.Scene {
         }
       }
       const d = distance(e.pos, this.pos);
+      if (!e.boss && d > 390 && !["stunned", "telegraph", "attack"].includes(e.state)) {
+        e.state = "idle"; e.visual.update(e.pos, "idle", e.angle, dt); e.hpbar.clear(); continue;
+      }
       e.angle = Math.atan2(this.pos.y - e.pos.y, this.pos.x - e.pos.x);
       if (e.boss) {
         this.updateBoss(e, dt);
@@ -1588,7 +1988,7 @@ export class World extends Phaser.Scene {
               speed =
                 def.speed *
                 (e.slow > 0
-                  ? 1 - Math.min(0.75, this.stats().slow ?? 0.35)
+                  ? 1 - Math.min(0.75, e.slowAmount || .35)
                   : 1);
             this.move(
               e.pos,
@@ -1652,8 +2052,8 @@ export class World extends Phaser.Scene {
         this.fire(e.pos, a + offset, 240, def.damage, false);
     } else if (e.kind === "summoner") {
       this.addDanger(e.target, 78, 0.9, def.damage, e.id);
-      if (this.enemies.filter((x) => !x.health.dead).length < 10)
-        this.spawnEnemy("hound", { x: e.pos.x + 22, y: e.pos.y + 22 });
+      if (this.enemies.filter((x) => !x.health.dead).length + this.arrivals.length < 10)
+        this.queueEnemy("hound", e.pos);
     } else if (e.kind === "automaton") {
       this.addDanger(e.pos, 125, 0.18, def.damage, e.id);
       e.health.dead = true;
@@ -1784,7 +2184,7 @@ export class World extends Phaser.Scene {
         phase >= 2 &&
         this.enemies.filter((x) => !x.health.dead).length < 5
       )
-        this.spawnEnemy("wraith", this.layout.enemies[0]);
+        this.queueEnemy("wraith", this.layout.enemies[0]);
     } else {
       const count = 10 + phase * 3;
       for (let i = 0; i < count; i++)
@@ -1866,6 +2266,10 @@ export class World extends Phaser.Scene {
     for (const s of this.shots) {
       if (!s.active) continue;
       s.life -= dt;
+      const steps = Math.max(1, Math.ceil(Math.max(Math.abs(s.vel.x * dt), Math.abs(s.vel.y * dt)) / 8));
+      let blocked = false;
+      for (let i = 1; i <= steps; i++) if (!this.canMoveTo(s.pos.x + s.vel.x * dt * i / steps, s.pos.y + s.vel.y * dt * i / steps, 3)) { blocked = true; break; }
+      if (blocked || s.life <= 0) { s.active = false; s.image.setVisible(false); continue; }
       s.pos.x += s.vel.x * dt;
       s.pos.y += s.vel.y * dt;
       const q = project(s.pos);
@@ -1878,11 +2282,6 @@ export class World extends Phaser.Scene {
             (s.vel.x - s.vel.y) * 0.94,
           ),
         );
-      if (!walkable(this.layout, s.pos.x, s.pos.y, 3) || s.life <= 0) {
-        s.active = false;
-        s.image.setVisible(false);
-        continue;
-      }
       // Mirror props reverse hostile projectiles; a short lifetime cap prevents loops.
       if (!s.friendly)
         for (const p of this.props)
@@ -1893,6 +2292,11 @@ export class World extends Phaser.Scene {
             s.image.setTint(0xb7ffe0);
           }
       if (s.friendly) {
+        for (const [index, prop] of this.props.entries())
+          if (prop.hp > 0 && prop.hp < 999 && distance(prop.data, s.pos) < 30) {
+            this.breakProp(index); s.active = false; s.image.setVisible(false); break;
+          }
+        if (!s.active) continue;
         for (const e of this.enemies)
           if (
             !e.health.dead &&
@@ -1900,13 +2304,14 @@ export class World extends Phaser.Scene {
             distance(e.pos, s.pos) < (e.boss ? 50 : 24)
           ) {
             s.hit.add(e.id);
-            const stats = this.stats(),
+            const stats = this.stats(s.weapon),
               crit = Math.random() < BALANCE.crit + (stats.crit ?? 0);
             this.applyPlayerHit(
               e,
               s.damage *
                 (crit ? BALANCE.critMultiplier + (stats.critDamage ?? 0) : 1),
               crit,
+              s.weapon,
             );
             if (s.pierce-- <= 0) {
               s.active = false;
@@ -1939,30 +2344,31 @@ export class World extends Phaser.Scene {
     this.app.audio.play("reward");
   }
   updateObjectives(dt: number): void {
+    this.updateExploration(dt);
     const o = this.objective;
     o.tick(dt);
     if (o.state === "failed") return;
-    const alive = this.enemies.filter((e) => !e.health.dead).length;
+    const alive = this.enemies.filter((e) => !e.health.dead).length + this.arrivals.length;
     if (this.pendingWave > 0 && alive === 0) {
       this.pendingWave--;
       this.spawnWave(3 + this.app.run!.nodes[this.app.run!.current].biome);
     }
-    if (this.waveTimer > 0 && o.state === "active") {
+    if (this.waveTimer > 0 && o.state === "active" && (o.kind !== "defend" || (this.markers[0] && distance(this.pos, this.markers[0].pos) < 190))) {
       this.waveTimer -= dt;
       if (this.waveTimer <= 0 && alive < 5) {
-        this.spawnWave(2);
+        this.spawnWave(2, o.kind === "defend" ? this.markers[0]?.pos : undefined);
         this.waveTimer = 10;
       }
     }
     if (
       o.kind === "eliminate" &&
-      alive === 0 &&
+      alive === 0 && this.arrivals.length === 0 &&
       this.pendingWave === 0 &&
       o.state === "active"
     )
       o.add(o.target);
     if (o.kind === "defend" && o.state === "active") {
-      o.add(dt);
+      if (this.markers[0] && distance(this.pos, this.markers[0].pos) < 190) o.add(dt);
       if (this.elapsed % 1 < dt && this.markers[0]) {
         const near = this.enemies.filter(
           (e) => !e.health.dead && distance(e.pos, this.markers[0].pos) < 95,
@@ -1978,11 +2384,18 @@ export class World extends Phaser.Scene {
     }
     if (o.kind === "escort" && o.state === "active" && this.escort) {
       if (distance(this.pos, this.escort) < 160) {
-        this.escort.x += dt * 9;
-        o.add(dt * 3.5);
+        const next = this.escortPath[0];
+        if (next) {
+          const d = distance(this.escort, next), step = Math.min(d, dt * 55);
+          if (d > 0) { this.escort.x += (next.x - this.escort.x) / d * step; this.escort.y += (next.y - this.escort.y) / d * step; }
+          this.escortTravel += step;
+          if (d <= step + .1) this.escortPath.shift();
+          o.add(step / this.escortLength * 100);
+        } else o.add(100);
         this.effects.burst(this.escort, 0xb4eaff, 1, 10);
       }
       const q = project(this.escort);
+      if (this.markers[0]) this.markers[0].pos = { ...this.escort };
       this.markers[0]?.image.setPosition(q.x, q.y);
       this.markers[0]?.label.setPosition(q.x, q.y - 100).setText("ECO");
     }
@@ -2012,15 +2425,17 @@ export class World extends Phaser.Scene {
           for (const mark of this.markers) {
             mark.done = false;
             mark.image.clearTint().setAlpha(1);
-            mark.label.setText(["I", "II", "III"][this.markers.indexOf(mark)]);
+            mark.label.setText(["I", "II", "III", "IV", "V"][this.markers.indexOf(mark)]);
           }
         }
       }
     }
-    if (o.state === "completed" && alive === 0 && !this.cleared)
+    if (o.state === "completed" && alive === 0 && this.arrivals.length === 0 && !this.cleared && this.relays.every((m) => m.done) && this.stageRequirement())
       this.completeRoom();
-    if (this.cleared && distance(this.pos, this.layout.exit) < 135)
-      this.app.ui.interaction("E", "ATRAVESSAR O PORTAL");
+    if (distance(this.pos, this.layout.exit) < 135) {
+      const phase = phaseState(this.app.run!);
+      this.app.ui.interaction("E", this.gateOpening ? "ABRINDO O PORTÃO" : !phase.keyFound ? "PORTÃO TRANCADO · ENCONTRE A CHAVE" : !this.cleared ? "PORTÃO SELADO · CONCLUA OS OBJETIVOS" : phase.gateOpened ? "ATRAVESSAR O PORTÃO" : "USAR CHAVE E ABRIR PORTÃO");
+    }
     else if (!this.cleared) {
       const close = this.markers.some(
         (m) => !m.done && distance(this.pos, m.pos) < 80,
@@ -2034,29 +2449,27 @@ export class World extends Phaser.Scene {
           : "",
       );
     } else this.app.ui.interaction("", "");
+    this.explorationPrompt();
   }
   completeRoom(): void {
     if (this.cleared) return;
     this.cleared = true;
     const run = this.app.run!,
       node = run.nodes[run.current];
+    this.rewardPending = !(node.kind === "boss" && node.biome === 3) && !["event", "shop", "explore", "secret"].includes(node.kind);
     this.objective.state = "completed";
     const bonus = this.objective.secondary().filter((x) => x.success).length;
-    run.coins += 20 + bonus * 8;
-    const salvage = awardRoomSalvage(this.app.store.data, node, run.visited);
-    if (salvage) grantSurvivalLoot(this.app.store.data, node);
-    if (salvage)
-      this.app.ui.toast(
-        `Materiais preservados: ${MATERIALS.filter((m) => salvage[m.id] > 0)
-          .map((m) => `${salvage[m.id]} ${m.name}`)
-          .join(" · ")} · +2 Ecos`,
-      );
+    if (!run.visited.includes(node.id)) {
+      run.visited.push(node.id);
+      this.collectLoot({ ...roomSalvage(node), ...survivalLoot(node), echoes: 2, coins: 20 + bonus * 8 }, `room:${node.id}`);
+    }
     this.health.heal(this.stats().heal ?? 0);
     run.hp = this.health.hp;
     run.charge = this.ultimate;
     this.app.store.data.run = run;
     this.app.store.write();
-    this.exit.setTint(0xcbffcf);
+    this.exit.setTint(phaseState(run).keyFound ? 0xcbffcf : 0xffffff);
+    if (phaseState(run).gateOpened) this.exit.setFrame("gate-open");
     this.app.audio.combat = false;
     this.app.audio.play("reward");
     this.app.ui.announcement(
@@ -2064,12 +2477,11 @@ export class World extends Phaser.Scene {
       `+${20 + bonus * 8} ÓBOLOS · ${bonus} DESAFIOS CONCLUÍDOS`,
       2100,
     );
-    if (node.kind === "boss" && node.biome === 3)
-      this.time.delayedCall(1500, () => this.app.ui.endingChoice());
+    if (node.kind === "boss" && node.biome === 3) this.app.ui.toast("Encontre a chave e abra o último portão para escolher o destino da aurora.");
     else if (!["event", "shop", "explore", "secret"].includes(node.kind)) {
-      this.rewardPending = true;
       this.time.delayedCall(650, () => this.app.ui.rewards());
     }
+    this.app.saveCheckpoint();
   }
   updateHubInteraction(): void {
     const npc = this.npcs
@@ -2088,12 +2500,21 @@ export class World extends Phaser.Scene {
     } else this.app.ui.interaction("", "");
   }
   idleDecor(dt: number): void {
+    if (this.landscapeGround) updateLandscapeGround(this.landscapeGround, this.cameras.main);
     if (!this.effects) return;
     const actors = [
       project(this.pos),
       ...this.npcs.map((n) => project(n.pos)),
       ...this.enemies.filter((e) => !e.health.dead).map((e) => project(e.pos)),
     ];
+    if (this.isHub) {
+      const village = this.layout as VillageLayout, inside = houseAt(village, this.pos);
+      for (const h of this.villageHouses) {
+        const house = village.houses.find(v => v.npc === h.npc)!;
+        const open = inside?.npc === h.npc || distance(this.pos, house.door) < 105 || this.app.ui.activeNpc === h.npc;
+        h.roof.setAlpha(approachAlpha(h.roof.alpha, open ? .06 : 1, dt));
+      }
+    }
     for (const o of this.occluders) {
       const blocked = actors.some((actor) =>
         obscuresActor(
@@ -2107,7 +2528,7 @@ export class World extends Phaser.Scene {
         ),
       );
       o.image.setAlpha(
-        approachAlpha(o.image.alpha, blocked ? 0.22 : o.restAlpha, dt),
+        approachAlpha(o.image.alpha, blocked ? o.blockedAlpha : o.restAlpha, dt),
       );
       for (const attachment of o.attachments)
         attachment.setAlpha(o.image.alpha);
@@ -2131,26 +2552,23 @@ export class World extends Phaser.Scene {
     const quality = this.app.store.data.settings.quality;
     const rate = quality === "low" ? 10 : quality === "medium" ? 25 : 42;
     if (Math.random() < dt * rate) {
+      const view = this.cameras.main.worldView, palette = LANDSCAPES[environmentTheme(this.isHub, this.app.run?.nodes[this.app.run.current].biome ?? 0)];
       this.effects.ambient(
-        400 + Math.random() * 1350,
-        100 + Math.random() * 750,
-        this.isHub
-          ? 0xa8d1cc
-          : Phaser.Display.Color.HexStringToColor(
-              BIOMES[this.app.run?.nodes[this.app.run.current].biome ?? 0]
-                .color,
-            ).color,
+        view.x + Math.random() * view.width,
+        view.y + Math.random() * view.height,
+        palette.mote,
       );
     }
     if (this.app.ui.screen !== "play")
       this.player.update(this.pos, "idle", this.facing, dt);
     this.ambient.clear();
     if (quality !== "low") {
-      this.ambient.fillStyle(this.isHub ? 0x9eb6be : 0x8bafbd, 0.016);
+      const view = this.cameras.main.worldView, palette = LANDSCAPES[environmentTheme(this.isHub, this.app.run?.nodes[this.app.run.current].biome ?? 0)];
+      this.ambient.fillStyle(palette.haze, this.isHub ? .022 : .017);
       for (let i = 0; i < (quality === "high" ? 5 : 2); i++)
         this.ambient.fillEllipse(
-          600 + i * 230 + Math.sin(this.decorTime * 0.12 + i) * 90,
-          250 + i * 110,
+          view.x + i * 230 + Math.sin(this.decorTime * 0.12 + i) * 90,
+          view.y + 80 + i * 110,
           660,
           100,
         );

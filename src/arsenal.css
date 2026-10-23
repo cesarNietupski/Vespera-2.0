@@ -1,0 +1,46 @@
+.weapon-loadout { display:flex; gap:12px; flex-wrap:wrap; margin:14px 0; }
+.loadout-slot { display:flex; align-items:center; gap:10px; border:2px solid #8b6442; background:#30231d; color:#f9e9bd; padding:10px 14px; min-width:230px; flex:1; box-shadow:inset 0 0 0 2px #171b22; }
+.loadout-slot.active { border-color:#edc675; background:#403124; }
+.loadout-slot span { display:flex; flex-direction:column; gap:4px; flex:1; }
+.loadout-slot small { font-size:12px; color:#dec99c; }
+.loadout-slot b { font-size:17px; }
+.loadout-slot em { font-size:11px; color:#9be8bb; font-style:normal; }
+.weapon-loadout.compact { margin:5px 0 0; gap:5px; }
+.game-bottom { display:grid; grid-template-columns:390px 340px minmax(0,1fr); grid-template-rows:auto auto; column-gap:20px; row-gap:10px; }
+.game-bottom .health-block { grid-column:1; grid-row:1 / span 2; }
+.weapon-switch-hud { position:static; grid-column:2; grid-row:2; width:auto; min-width:0; }
+.game-bottom .skillbar { grid-column:2; grid-row:1; }
+.game-bottom .boon-strip { grid-column:3; grid-row:2; justify-self:end; max-width:100%; }
+#interaction { bottom:190px; }
+#toast { bottom:255px; }
+.compact .loadout-slot { min-width:0; padding:4px 7px; gap:6px; }
+.compact .loadout-slot .px-icon { width:24px; height:24px; }
+.compact .loadout-slot b { font-size:12px; }
+.compact .loadout-slot small,.compact .loadout-slot em { font-size:9px; }
+.weapon-options { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); }
+.forge-card .mastery-link { margin:8px 0; width:100%; }
+.weapon-xp { display:block; color:#69401e; font-weight:bold; margin-bottom:10px; }
+.mastery-heading { display:flex; align-items:center; gap:20px; }
+.mastery-heading > .px-icon { width:80px; height:80px; }
+.mastery-root { max-width:420px; margin:20px auto 26px; }
+.mastery-branches { display:grid; grid-template-columns:1fr 1fr; gap:28px; }
+.mastery-branches > section > h3 { text-align:center; }
+.mastery-node { border:3px double #936b3f; background:#e7d3a7; padding:18px; box-shadow:3px 3px 0 #64452b; }
+.mastery-node.learned { border-color:#4c7c54; background:#d4dfb4; }
+.mastery-node h3 { font-size:22px; margin:8px 0; }
+.mastery-node p { font-size:16px; min-height:42px; }
+.mastery-node small,.mastery-node span { display:block; font-size:14px; }
+.mastery-node button { margin:12px 0 0; width:100%; }
+.mastery-arrow { display:block; text-align:center; font-size:28px; color:#76502d; }
+#weapon-xp-notice { position:absolute; left:50%; top:106px; display:flex; align-items:center; gap:10px; background:#28231eee; border:2px solid #c29a58; color:#f8e8bf; padding:12px 16px; font-size:16px; opacity:0; transform:translate(-50%,12px); transition:opacity .2s,transform .2s; pointer-events:none; z-index:3; }
+#weapon-xp-notice.visible { opacity:1; transform:translate(-50%,0); }
+#weapon-xp-notice small { display:block; font-size:13px; color:#aee1bd; margin-top:4px; }
+.map-hazard circle { fill:#8c3d29; stroke:#ffcf82; }
+.map-hazard text { fill:#ffda8d; }
+.map-reinforcement circle { fill:#3b3250; stroke:#c5abec; }
+.map-reinforcement text { fill:#dccbfa; }
+@media(max-width:700px) { .mastery-branches { gap:12px; } .mastery-node { padding:12px; } .mastery-node h3 { font-size:18px; } .loadout-slot { min-width:180px; } .compact .loadout-slot span small,.compact .loadout-slot em { display:none; } }
+@media(max-width:1100px) { .game-bottom { grid-template-columns:330px 300px minmax(0,1fr); } }
+@media(max-width:980px) { .hub-hint,.room-return { bottom:190px; } }
+@media(max-width:780px) { .game-bottom { grid-template-columns:280px minmax(0,285px) minmax(0,1fr); column-gap:12px; } }
+@media(max-width:600px) { .game-bottom { grid-template-columns:minmax(150px,.85fr) minmax(180px,1fr); } .game-bottom .health-block { width:100%; } }

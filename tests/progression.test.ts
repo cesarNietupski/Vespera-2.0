@@ -13,9 +13,11 @@ import {
   progressionStats,
   awardRoomSalvage,
 } from "../src/game/crafting";
+import { weaponRecord } from "../src/game/weapons";
 function funded() {
   const s = freshSave();
   s.echoes = 10000;
+  s.weaponXP.blade = 500;
   s.materials = { iron: 1000, glass: 1000, ember: 1000 };
   return s;
 }
@@ -103,13 +105,14 @@ describe("Receitas, aprimoramentos e infusões", () => {
     expect(s).toEqual(before);
     s.materials.iron = 100;
     s.echoes = 0;
+    s.weaponXP.blade = 60;
     const broke = structuredClone(s);
     expect(craftWeapon(s, "blade", "upgrade")).toContain("Ecos");
     expect(s).toEqual(broke);
   });
   it("exige propriedade, limita +3 e mantém aprimoramentos separados por arma", () => {
     const s = funded();
-    expect(craftWeapon(s, "bow", "upgrade")).toContain("primeiro");
+    expect(craftWeapon(s, "crossbow", "upgrade")).toContain("primeiro");
     for (let i = 0; i < 3; i++)
       expect(craftWeapon(s, "blade", "upgrade")).toBe("");
     const before = structuredClone(s);
@@ -189,9 +192,9 @@ describe("Persistência e obtenção de materiais", () => {
     };
     const s = parseSave(JSON.stringify(legacy));
     expect(s.talents.vitality).toBe(2);
-    expect(s.unlocked).toEqual(["blade", "hammer"]);
+    expect(s.unlocked).toEqual(["blade", "bow", "hammer"]);
     expect(s.run?.seed).toBe("legacy");
-    expect(s.weaponLevels).toEqual({ blade: 0, hammer: 0, bow: 0 });
+    expect(s.weaponLevels).toEqual(weaponRecord(() => 0));
     expect(s.materials).toEqual({ iron: 4, glass: 2, ember: 0 });
     expect(s.skills).toEqual({});
   });
@@ -208,7 +211,7 @@ describe("Persistência e obtenção de materiais", () => {
     );
     expect(s.skills).toEqual({});
     expect(s.materials).toEqual({ iron: 0, glass: 2, ember: 0 });
-    expect(s.weaponLevels).toEqual({ blade: 3, hammer: 0, bow: 0 });
+    expect(s.weaponLevels).toEqual({ ...weaponRecord(() => 0), blade: 3 });
     expect(s.infusions.blade).toBe("none");
     expect(s.infusions.hammer).toBe("none");
     expect(s.equipped).toBe("blade");

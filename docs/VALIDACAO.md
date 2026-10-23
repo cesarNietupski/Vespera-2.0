@@ -1,66 +1,74 @@
-# Validação executada — 20 de outubro de 2026
+# Validação — 23 de outubro de 2026
 
-Ambiente: Windows, Node.js 24.18.0, TypeScript estrito, Phaser 3.90.0, Vite 7.3.7, Vitest 5.0.5 e Playwright com Chromium e Microsoft Edge instalado.
+Ambiente: Windows, Node.js 24.18.0, TypeScript estrito, Phaser 3.90.0, Vite 7.3.7, Vitest 5.0.5, Playwright Chromium e Microsoft Edge.
 
 | Verificação | Resultado |
 | --- | --- |
-| `npm install` | Concluído, lockfile incluído |
-| `npm run assets:generate` | 64 assets originais RGBA8888, 26 atlas JSON, fontes nativas PNG e manifesto; 9.405 frames em atlas |
-| `npm run assets:check` | Todos os quadros dos três equipamentos, seis NPCs, oito inimigos e quatro chefes sem recortes nas bordas |
-| `npm run build` | Aprovado; build estático em `dist/` |
-| `npm run test` | **221 testes aprovados**, sete arquivos |
-| Seeds | **100 seeds × 36 câmaras**, determinismo, conectividade, A*, objetivos, entrada e saída; nenhum fallback nessas amostras |
-| `npm run test:e2e` (antes do inventário unificado) | **32 cenários aprovados**, dezesseis em Chromium e dezesseis em Microsoft Edge; rodada conjunta em 4,8 minutos, incluindo retorno ao Farol, sobrevivência, seis moradores, acesso por conversa, árvore, crafting, fonte, combos e sobreposição |
-| Playwright: inventário, sobrevivência e retorno | **16 cenários aprovados** em Chromium e Microsoft Edge, em 2,4 minutos, após integrar o inventário unificado |
-| `node scripts/smoke-production.mjs` | Build de produção: menu, Farol com seis moradores, inventário pela tecla I, oito recursos e provisões, caminhada até Lume, conversa, ração preparada, portal, expedição, necessidades, movimento, ataque e esquiva; zero erros de console e zero requisições HTTP externas |
-| `npm audit` | **0 vulnerabilidades**, incluindo desenvolvimento |
-| HTTP da prévia | 200 |
+| `npm test` | **505 testes aprovados**, 14 arquivos |
+| `npm run build` | TypeScript e build estático aprovados; versão atual em `dist/` |
+| `npm run assets:check` | Todos os quadros dos 13 equipamentos, seis moradores, oito inimigos e quatro chefes sem recortes nas bordas |
+| Manifesto de arte | 86 assets RGBA8888; 34 atlas e quatro tilesets; 22.286 frames |
+| Vozes incluídas | 62 WAVs PCM mono 22.050 Hz/16 bits; cerca de 671 s; cabeçalhos, tamanho, conteúdo audível e cobertura dos diálogos verificados |
+| `npx playwright test --project=edge` | **50 cenários aprovados** em 5,6 minutos, rodada completa antes dos dois casos finais de menu e estabilidade |
+| HUD final — Edge e Chromium | **4 casos aprovados**: três resoluções e estabilidade dos elementos durante atualização de tempo e barras |
+| Menu final — Edge e Chromium | Botões e painel acima do rodapé em 1440×900, 1280×720 e 800×600; aprovado nos dois navegadores |
+| Diálogos e voz — Edge e Chromium | Seis moradores, temas, avanço, repetição, cancelamento e leitura automática; reprodução real dos WAVs aprovada nos dois navegadores |
+| `npx playwright test tests/e2e/village-gates.spec.ts --project=chromium --grep terminais` | Colisão por caminhada e esquiva nos quatro biomas e nas quatro arenas de chefes |
+| Vila e chaves em Chromium — rodada anterior | **5 cenários aprovados**, incluindo casas, chave por ataque e E, save, portão e último chefe |
+| Arsenal e sobrevivência em Chromium e Edge | **20 cenários aprovados** na rodada direcionada anterior à ampliação final dos desenhos de fase |
+| `npx playwright test tests/e2e/stage-design.spec.ts --project=chromium` | **4 cenários aprovados**, incluindo transição pelo portal e nove mapas distintos |
+| Smoke da produção no Edge | Fluxo normal sem QA: menu, vila, inventário, caminhada até Lume, diálogo/voz, cozinha, portão, combate, baú animado, troca por F, mapa, save, continuação na mesma posição e backup; zero erros de console e zero requisições externas |
+| `git diff --check` | Sem erros de whitespace |
+| HTTP de `http://127.0.0.1:4173/` | 200 |
 
-## Cobertura real no navegador
+A suíte E2E agora define 52 cenários por navegador. A rodada completa de 50 no Edge ocorreu antes dos dois últimos casos de menu e estabilidade; os refinamentos finais receberam execuções direcionadas de gameplay, chefes/finais, combos, proporção, campanhas, saves, menus, voz e HUD. O Chromium recebeu os casos novos de campanhas/checkpoints/ambiente/menu, além de HUD e vozes na validação final. Não se apresenta essa cobertura como uma rodada única de 104 execuções.
 
-1. Menu, arte, Farol, oficina, expedição, movimento, combate, Juramento, próxima câmara, pausa e mapa.
-2. Recarregamento, continuação e persistência da qualidade gráfica.
-3. Os quatro chefes, fases, memórias persistentes, vitória e **os dois finais**, incluindo retorno ao Farol.
-4. Obeliscos e combate com martelo e arco no **fallback Canvas**.
-5. Morte, preservação de recursos, ressurreição e outra expedição.
-6. Menu medieval, texto limpo e seis ataques diferentes com cliques reais do mouse em cada uma das três armas.
-7. Descrições de cartas com pelo menos 16 px e botão principal com pelo menos 17 px em fonte de sistema.
-8. Altura e sombra dos personagens; passagem atrás e à frente de um pilar, profundidade e transição de opacidade.
-9. Árvore com pré-requisitos, compra de níveis, efeito na vida e armadura, persistência e redistribuição integral dos Ecos.
-10. Forja de arma, aprimoramento +1, infusão de Brasa, equipamento persistente e incêndio aplicado em um acerto real.
-11. Materiais recebidos ao restaurar uma câmara e preservados após morrer e recarregar o jogo.
-12. Seis moradores acessíveis, ausência de atalhos e bloqueio de compras sem conversa ou fora do alcance do NPC.
-13. Caminhada real até Lume, conversa, comida preparada, chá com Caio, roupas com Íria e persistência do guarda-roupa.
-14. Necessidades e penalidades, pausa sem passagem de tempo, consumo pelos atalhos, dano extremo e continuação do save.
-15. Retorno ao Farol após concluir uma câmara, bloqueio antes da conclusão, recursos preservados, abastecimento, recarregamento e continuação pelo portal sem repetir saque.
-16. Retorno após chefes, inclusive antes da decisão final, com retomada do ponto salvo e acesso ao próximo bioma ou ao desfecho.
-17. Inventário pelo HUD, tecla I e pausa; oito recursos com quantidades, saldos zerados, moedas e equipamento da expedição salva.
-18. Consumo de cada comida e bebida, redução das necessidades, estoque atualizado, bloqueio de desperdício, tempo pausado e persistência após recarregar.
-19. Troca de roupas já possuídas durante a expedição, peça não possuída bloqueada, persistência ao continuar e crafting remoto impedido.
+## Campanhas, checkpoint e diálogos
 
-Os encontros de QA usam inimigos com vida reduzida, posicionamento controlado e energia suprema carregada. Os objetivos interativos têm avanço de tempo controlado. Isso verifica integração sem alegar conclusão manual de uma campanha inteira no balanceamento padrão. O smoke test de produção usa controles e fluxo normais, sem habilitar o modo de QA.
+Testes de regras validam migração, independência de inventários, troca, recarga, importação em espaço separado, limite de seis campanhas, exclusão de inativas e recuperação por cópia quando o espelho está corrompido. Armazenamento bloqueado mantém a sessão em memória e é sinalizado.
 
-## Evidências
+No navegador, um inimigo é ferido antes de salvar; a recarga conserva sua vida, a posição de Eira, a vida do jogador e o progresso do objetivo. Recompensa pendente reaparece sem duplicar saque. F1 não permite dispensá-la. Trocar de campanha e importar backup preservam a original. Recarregar no menu não desloca a expedição para a vila. Morte seguida de pagehide, inclusive durante a animação, mantém a expedição encerrada.
 
-Capturas atuais do build de produção em `docs/screenshots/`: menu, Farol, cozinha e Jardins. As capturas dos serviços de Sálvia, Caio e Íria e de habilidades aprendidas e aprimoramentos/infusões vêm da validação da UI em Playwright com saldo controlado. Escolhas, objetivos, mapa, quatro chefes e final são gerados em `test-results/` ao executar a suíte completa.
+Todos os moradores oferecem apresentação e dois temas. A integração usa arquivos WAV reais em português e verifica perfis distintos, reprodução, mudança de assunto, avanço, repetição, cancelamento e configuração de leitura automática. As regras conferem correspondência entre texto e catálogo em todos os ramos estáticos e retornos de Sálvia de 1 a 20. Testes de fallback cobrem voz local, cancelamento tardio e indisponibilidade.
 
-O inventário acrescenta capturas de produção em `inventario.png` e `inventario-recursos.png`; as capturas de consumo e troca de roupa nos testes usam estoque controlado. A rodada atual executou `npx playwright test tests/e2e/inventory.spec.ts tests/e2e/survival.spec.ts tests/e2e/farol-return.spec.ts`. O conjunto completo agora contém 19 cenários por navegador; os testes de combate não foram repetidos nesta alteração de inventário.
+## Ambiente e revisão de assets
 
-Os testes levaram à correção de timestamp truncado no save, HUD inconsistente no retorno, estados de pausa, recompensas repetidas de salas concluídas e comandos curtos perdidos entre frames. Seletores e prazos de espera foram ajustados para renderização sem GPU dedicada no navegador de testes.
+Os 36 desenhos de fase recebem decoração determinística sem alterar piso, segredo ou portão. O navegador verifica cobertura do chão no início e na saída de todas as câmaras, limite de cinco texturas em cache e fallback Canvas. A conferência visual inclui vila e quatro regiões, com árvores, vegetação, ruínas, peças de forja e margens rasas.
 
-A revisão visual verificou PNGs de 32 bits, pixels ampliados sem interpolação, seis poses distintas, janelas de impacto e enquadramento dos sprites. Humanoides foram reduzidos em aproximadamente 32%, com sombras, barras e nomes correspondentes; pés apoiados, ordem de profundidade, fundações recortadas pelo contorno da sala e cantos completos nas molduras foram revisados em capturas. A reação ao dano deixou de herdar o frame de um ataque simultâneo. A observação dos combos no teste usa frames de renderização para não perder animações curtas entre consultas.
+Os contratos de animação cobrem as 13 armas, seis moradores, oito inimigos e quatro chefes, com pivôs, quadros retangulares, RGBA e ampliação nearest. Ferramentas de Lume, Caio e Íria não recebem mais a arma genérica de Eira. HUD usa elementos persistentes para evitar reconstruir o painel de objetivo a cada atualização. Moldura e conteúdo têm camadas explícitas para preservar leitura.
 
-Após a rodada completa, a verificação de leitura foi repetida nos dois navegadores para confirmar painéis opacos desde a abertura. A carta selecionada preserva o fundo claro de pergaminho; esse acabamento foi conferido novamente no Edge e em captura, seguido de novo build aprovado.
+## Vila e chaves
 
-Os 15 novos testes de progressão verificam requisitos e talentos finais, custos crescentes, limite de níveis, restituição exata, compras sem consumo parcial, receitas, substituição de infusão, agregação de atributos, saque sem duplicação, morte e migração de saves antigos ou corrompidos. A integração usa três cenários adicionais por navegador, com recursos iniciais controlados somente nos dois cenários de compra. O cenário de coleta usa o saque normal da primeira câmara.
+Os testes de regras conferem seis casas acessíveis com ruas, entradas e paredes, além de esconderijos determinísticos nas 36 câmaras com seis seeds cada. A chave sempre pode ser alcançada sem abrir a passagem secreta. Coleta exige descoberta; portões exigem chave, objetivos e recompensa resolvida. Save preserva descoberta e posse, a fase seguinte começa sem chave, e a migração mantém câmaras antigas já liberadas.
 
-A extensão de sobrevivência acrescenta 19 testes de regras e migração e 13 verificações de novos assets. Verifica clima, fome/sede, isolamento, aquecimento, dano ambiental, imunidade preservada, consumo sem desperdício, receitas atômicas, moradores responsáveis, ingredientes, estoque e roupas após a morte. Três novos cenários por navegador verificam a integração; os antigos fluxos de oficina e árvore agora também passam por conversa e proximidade.
+No navegador, Eira percorre fisicamente as seis casas, conversa com cada morador e revela seus interiores. Os testes atacam o esconderijo, recarregam o save, recolhem com E, verificam inventário e mapa, abrem o portão com animação e chegam à fase seguinte. Também cobrem o último chefe e o retorno ao Farol sem dispensar a chave. A nova colisão é exercitada por caminhada e esquiva nos quatro biomas e nas quatro arenas; os 36 mapas, em seis seeds cada, não deixam piso ou conteúdo além do portão, inclusive com o segredo aberto. Testes conferem bloqueio das folhas e permanência dos pilares sólidos após abrir.
 
-A revisão visual removeu o anúncio da câmara de cima dos painéis. Os seis cenários de sobrevivência passaram novamente nos dois navegadores após esse ajuste. O retorno entre câmaras acrescentou mais dois cenários por navegador; a rodada direcionada passou nos quatro casos, seguida da suíte completa com 32 casos aprovados.
+## Fases e portões
 
-## Limites
+O teste de identidade compara células transitáveis, ignorando variações da textura: confirmou **36 geometrias diferentes na mesma campanha**. Há nove propostas de percurso por região: travessia, labirinto, ilhas, bastião, encruzilhada, claustro, arena, tesouro e passarela de pulsos.
 
-- Não houve benchmark que confirme 60 FPS em diferentes GPUs e notebooks.
-- Não houve playtest prolongado de dificuldade, sinergias ou duração da campanha.
-- Efeitos gráficos avançados, interações ambientais e refinamentos artísticos ainda pendentes estão enumerados no README.
-- Compatibilidade verificada nos navegadores disponíveis nesta máquina; não em todas as versões antigas.
+As regras de navegação percorrem quatro seeds em cada uma das 36 posições de campanha. Validam acesso a objetivos, props, relays, perigos, entradas e saída; a passagem secreta permanece opcional. Também continuam os 60 casos de exploração e 100 seeds do gerador original, cada uma com grafo de 36 nós.
+
+A integração atravessa portões com E e verifica o próximo desenho, regra e mapa. Nos casos antigos de desenho, a preparação de QA libera explicitamente a chave; os novos casos exercitam a busca e o bloqueio completos. Confere ordem dos marcos, pares alternados, bloqueio por guardas, dois baús exigidos e os nove mapas de uma região. Os quatro chefes e os dois finais continuam na regressão completa.
+
+## Arsenal, baús e encontros
+
+Os testes verificam dois espaços de equipamento, troca por F, carregamento de atlas sob demanda, persistência e dano real com todas as dez armas novas. XP é atribuída à arma que disparou o projétil; árvores e forja bloqueiam compras sem XP, pré-requisitos ou materiais da arma correspondente. As assinaturas dos equipamentos e os valores de combate são exercitados nas regras.
+
+Baús usam aproximação de Eira, pose de interação e oito quadros de tampa. Testes conferem abertura gradual, cancelamento com Espaço antes da coleta, concessão sincronizada e impossibilidade de repetir o saque. Passagens, props e registros de risco também são cobertos.
+
+Guardas já existem na entrada da fase. Reforços aguardam um aviso com portão antes de surgir; chegadas pendentes bloqueiam a conclusão. Flores limpam raízes, marcos fecham válvulas, a maré reduz velocidade e aumenta frio, e o eclipse causa dano em cruz.
+
+## Regressão preservada
+
+A suíte completa verifica menu e tipografia legível, Farol, seis moradores e serviços presenciais, inventário, provisões, roupas, sobrevivência e pausa; árvore de 18 habilidades, receitas e infusões no combate; combos, câmera, proporção e oclusão; objetivos, escolta e defesa; saque, perda parcial na morte e refúgio de upgrades; retorno ao Farol, continuação sem repetir recompensas, quatro chefes e ambos os finais. O fallback Canvas continua coberto.
+
+Os testes de QA usam posicionamento e tempo controlados, energia carregada ou vida ajustada para testar os sistemas. Não alegam conclusão manual da campanha no balanceamento padrão. O smoke de produção usa comandos normais e uma sessão nova, sem habilitar `?test=1`.
+
+## Evidências e limites
+
+Capturas atuais em `docs/screenshots/`: `revisao-menu.png`, `revisao-farol.png`, `revisao-inventario.png`, `revisao-inventario-recursos.png`, `revisao-cozinha.png`, `revisao-coleta-producao.png`, `revisao-mapa-fase-producao.png`, `revisao-jardins.png`, `dialogo-producao.png` e `campanhas-producao.png`, pelo fluxo normal. Capturas com QA incluem `revisao-ambiente-vila.png`, os quatro `revisao-ambiente-<região>.png`, `checkpoint-retomado.png`, `campanhas-salvas.png`, `dialogo-voz-orren.png`, `hud-objetivo-estavel.png`, `hud-polido-800.png`, `hud-polido-1280.png`, `hud-polido-1440.png` e `menu-polido-800.png`.
+
+A conferência visual final usa Edge e testes direcionados no Chromium. Nesta máquina, algumas capturas automatizadas de página inteira ainda omitem intermitentemente o conteúdo do painel de objetivos, embora os nós, estilos e valores permaneçam presentes e a captura individual do painel renderize o texto. A interface foi simplificada e sua atualização estabilizada; a peculiaridade das capturas continua registrada como limite de verificação, sem atribuir uma correção definitiva ao compositor do navegador.
+
+Não houve benchmark de FPS em diferentes GPUs nem playtest prolongado de dificuldade, economia e duração. As vozes são síntese, com duas bases e seis perfis, sem gravação de atores; a progressão narrativa continua compacta. As limitações artísticas e de produção estão descritas no README.

@@ -35,7 +35,7 @@ test("carrega arte, navega pelo Farol, combate, recompensa e próxima câmara", 
   await page.getByRole("button", { name: "×" }).click();
   await openExpedition(page);
   await page.locator("#seed-input").fill("E2E-AURORA");
-  await page.getByRole("button", { name: "Atravessar o portal →" }).click();
+  await page.getByRole("button", { name: "Atravessar o portão →" }).click();
   await expect.poll(async () => (await snap(page)).room).toBe(0);
   const before = await snap(page);
   await page.keyboard.down("d");
@@ -51,7 +51,8 @@ test("carrega arte, navega pelo Farol, combate, recompensa e próxima câmara", 
   await page.keyboard.up("d");
   await page.evaluate(() => (window as any).vesperaTest.prepareCombat());
   await page.waitForTimeout(120);
-  await page.mouse.click(850, 420);
+  const aim = await page.evaluate(() => (window as any).vesperaTest.aimPoint());
+  await page.mouse.click(aim.x, aim.y);
   await expect.poll(async () => (await snap(page)).alive).toBe(0);
   await expect.poll(async () => (await snap(page)).cleared).toBe(true);
   await expect(
@@ -59,7 +60,7 @@ test("carrega arte, navega pelo Farol, combate, recompensa e próxima câmara", 
   ).toBeVisible();
   await page.screenshot({ path: "test-results/juramentos.png" });
   await page.locator('[data-action="boon"]').first().click();
-  await page.evaluate(() => (window as any).vesperaTest.portal());
+  await page.evaluate(() => ((window as any).vesperaTest.unlockGate(), (window as any).vesperaTest.portal()));
   await page.waitForTimeout(200);
   await page.screenshot({ path: "test-results/jardins.png" });
   await page.keyboard.press("e");
@@ -149,6 +150,8 @@ test("quatro chefes mudam de fase, liberam memórias e permitem os dois finais",
       await page.locator('[data-action="boon"]').first().click();
     }
   }
+  await page.evaluate(() => { const t = (window as any).vesperaTest; t.unlockGate(); t.portal(); });
+  await page.keyboard.press("e");
   await page
     .getByRole("button", { name: /Devolver o movimento ao mundo/ })
     .click();
@@ -160,6 +163,9 @@ test("quatro chefes mudam de fase, liberam memórias e permitem os dois finais",
   await page.evaluate(() => (window as any).vesperaTest.scenario(33));
   await page.evaluate(() => (window as any).vesperaTest.ultimate());
   await page.keyboard.press("q");
+  await expect.poll(async () => (await snap(page)).cleared).toBe(true);
+  await page.evaluate(() => { const t = (window as any).vesperaTest; t.unlockGate(); t.portal(); });
+  await page.keyboard.press("e");
   await page
     .getByRole("button", { name: /Guardar o último crepúsculo/ })
     .click();
@@ -186,7 +192,7 @@ test("objetivos interativos, equipamentos e fallback gráfico permanecem jogáve
     (window as any).vesperaTest.objective("purify");
     (window as any).vesperaTest.clearEncounter();
   });
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 5; i++) {
     await page.evaluate(
       (i) => (window as any).vesperaTest.positionObjective(i),
       i,
@@ -235,7 +241,7 @@ test("morte preserva Ecos e ressurreição permite outra expedição", async ({
   await expect(page.getByText("Farol dos Ecos", { exact: true })).toBeVisible();
   expect((await snap(page)).hp).toBe(120);
   await openExpedition(page);
-  await page.getByRole("button", { name: "Atravessar o portal →" }).click();
+  await page.getByRole("button", { name: "Atravessar o portão →" }).click();
   await expect.poll(async () => (await snap(page)).room).toBe(0);
   expect(errors).toEqual([]);
 });

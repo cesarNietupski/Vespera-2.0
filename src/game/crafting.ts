@@ -5,6 +5,8 @@ import type {
   InfusionId,
   RoomNode,
 } from "../types";
+import { WEAPONS, WEAPON_IDS, isWeapon } from "./weapons";
+import { masteryStats, UPGRADE_XP } from "./mastery";
 import { skillStats } from "../data/skills";
 export const MATERIALS: {
   id: MaterialId;
@@ -87,7 +89,7 @@ export function recipe(
       ? { echoes: 12, materials: { iron: 6, ember: 1 } }
       : id === "bow"
         ? { echoes: 18, materials: { iron: 4, glass: 4 } }
-        : { echoes: 0, materials: {} };
+        : id === "blade" ? { echoes: 0, materials: {} } : { echoes: 12 + WEAPON_IDS.indexOf(id) * 2, materials: { iron: WEAPONS[id].slot === "melee" ? 8 : 5, glass: WEAPONS[id].slot === "ranged" ? 5 : 2, ember: 1 } };
   if (action === "upgrade") {
     const next = s.weaponLevels[id] + 1;
     return {
@@ -114,7 +116,7 @@ export function craftBlock(
   infusion: InfusionId = "none",
 ): string {
   if (
-    !["blade", "hammer", "bow"].includes(id) ||
+    !isWeapon(id) ||
     !["forge", "upgrade", "infuse"].includes(action)
   )
     return "Receita desconhecida";
@@ -123,6 +125,8 @@ export function craftBlock(
     return "Forje a arma primeiro";
   if (action === "upgrade" && s.weaponLevels[id] >= 3)
     return "Aprimoramento máximo +3";
+  if (action === "upgrade" && s.weaponXP[id] < UPGRADE_XP[s.weaponLevels[id] + 1])
+    return `Requer ${UPGRADE_XP[s.weaponLevels[id] + 1]} XP com esta arma (${s.weaponXP[id]} XP)`;
   if (action === "infuse") {
     if (!INFUSIONS.some((i) => i.id === infusion))
       return "Infusão desconhecida";
@@ -158,6 +162,7 @@ export function progressionStats(
 ): Record<string, number> {
   const out = skillStats(s),
     rank = s.weaponLevels[id];
+  for (const [key, value] of Object.entries(masteryStats(s, id))) out[key] = (out[key] ?? 0) + value;
   out.damage = (out.damage ?? 0) + rank * 0.12;
   out.attackSpeed = (out.attackSpeed ?? 0) + rank * 0.03;
   for (const [key, value] of Object.entries(

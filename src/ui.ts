@@ -7,11 +7,19 @@ import type {
   NpcService,
   ConsumableId,
   ClothingId,
+  Loot,
 } from "./types";
 import { BALANCE, BIOMES, WEAPONS } from "./game/config";
 import { BOONS, SCHOOL_COLORS, boonStats } from "./data/boons";
-import { dialogue, MEMORIES } from "./data/narrative";
+import { dialogue, MEMORIES, CONVERSATIONS } from "./data/narrative";
+import { CHARACTER_VOICES } from "./game/voices";
 import { rng } from "./game/procedural";
+import { navigationPath } from "./game/exploration";
+import { phaseState, LOOT_ITEMS } from "./game/loot";
+import type { VillageLayout } from "./game/village";
+import { TILE } from "./game/config";
+import { WEAPON_IDS, isWeapon } from "./game/weapons";
+import { masteryTree, masteryBlock, UPGRADE_XP } from "./game/mastery";
 import { comboMove } from "./game/combos";
 import { OBJECTIVES } from "./game/objectives";
 import { HUB_NPCS, hubNpc } from "./data/npcs";
@@ -53,6 +61,7 @@ export type Screen =
   | "rewards"
   | "settings"
   | "armory"
+  | "mastery"
   | "talents"
   | "gallery"
   | "map"
@@ -66,7 +75,10 @@ export type Screen =
   | "credits"
   | "survivalCraft"
   | "provisions"
-  | "inventory";
+  | "inventory"
+  | "campaigns"
+  | "newCampaign"
+  | "campaignDelete";
 type InventoryTab = "provisions" | "resources" | "clothes" | "equipment";
 const escape = (s: string): string =>
   s.replace(
@@ -90,11 +102,17 @@ export class UI {
   forgeMode: CraftAction = "forge";
   infusionChoice: InfusionId = "glass";
   inventoryTab: InventoryTab = "provisions";
+  xpTimer = 0;
+  lootTimers = new Map<string, number>();
+  managementReturn: Screen = "menu";
+  currentLine = "";
+  private markupCache = new WeakMap<HTMLElement, string>();
   constructor(public app: App) {
     this.root.innerHTML =
       '<div id="hud"></div><div id="overlay"></div><div id="announcement" aria-live="polite"></div><div id="toast" role="status"></div><div id="interaction"></div>';
     this.overlay = document.getElementById("overlay")!;
     this.hudEl = document.getElementById("hud")!;
+    this.root.insertAdjacentHTML("beforeend", '<aside id="loot-feed" aria-live="polite" aria-label="Recursos coletados na fase"></aside>');
     this.root.addEventListener("click", (e) => {
       const b = (e.target as HTMLElement).closest<HTMLElement>("[data-action]");
       if (b) {
@@ -106,13 +124,31 @@ export class UI {
       const el = e.target as HTMLInputElement;
       if (el.dataset.setting) {
         const settings = this.app.store.data.settings;
-        const k = el.dataset.setting as "sfx" | "music" | "shake";
+        const k = el.dataset.setting as "sfx" | "music" | "shake" | "voice";
         settings[k] = Number(el.value) / 100;
         this.app.audio.apply();
+        if (k === "voice") this.app.voice.stop();
         this.app.store.write();
         el.parentElement!.querySelector("output")!.textContent = `${el.value}%`;
       }
     });
+    this.root.addEventListener("change", e => {
+      const el = e.target as HTMLInputElement;
+      if (el.dataset.campaignImport !== undefined && el.files?.[0]) void this.app.importCampaign(el.files[0]);
+      if (el.dataset.voiceAuto !== undefined) { this.app.store.data.settings.voiceAuto = el.checked; this.app.store.write(); this.app.voice.stop(); }
+    });
+    this.root.addEventListener("keydown", e => {
+      if (e.key === "Enter" && (e.target as HTMLElement).id === "campaign-name") { e.preventDefault(); this.action("createCampaign", ""); }
+      if (e.key !== "Tab" || !this.overlay.querySelector('[role="dialog"]')) return;
+      const controls = Array.from(this.overlay.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),select:not(:disabled),[tabindex="0"]'));
+      const first = controls[0], last = controls[controls.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+    });
+    this.app.voice.onStatus = status => {
+      const el = document.getElementById("voice-status");
+      if (el) el.textContent = status === "speaking" ? "Falando em português" : status === "unavailable" ? "Voz local em português indisponível · legendas ativas" : status === "muted" ? "Leitura automática desativada" : "Voz pronta";
+    };
   }
   button(
     label: string,
@@ -140,6 +176,11 @@ export class UI {
     this.overlay.innerHTML = `<div class="panel"><h2>A luz encontrou um obstáculo.</h2><p>${escape(s)}</p></div>`;
   }
   menu(): void {
+    this.app.campaignActive = false;
+    this.app.voice.stop(); this.clearLoot(); this.interaction("", "");
+    clearTimeout(this.announcementTimer); clearTimeout(this.toastTimer);
+    document.getElementById("announcement")?.classList.remove("show");
+    document.getElementById("toast")?.classList.remove("show");
     this.activeNpc = null;
     if (this.app.world) {
       this.app.world.time.paused = true;
@@ -150,6 +191,11 @@ export class UI {
     this.overlay.className = "main-menu";
     const s = this.app.store.data;
     this.overlay.innerHTML = `<div class="menu-atmosphere" aria-hidden="true"></div><div class="title-sparks" aria-hidden="true"></div><header class="menu-title"><h1><img src="assets/logo.png" alt="Véspera"></h1><p>AS ENGRENAGENS DA ÚLTIMA AURORA</p><div class="title-flourish">${this.px("sun")}</div></header><section class="menu-panel" aria-label="Menu principal"><div class="menu-panel-title">O FAROL DOS ECOS</div><nav class="main-nav">${this.button(`${this.px("arrow", "menu-arrow")}<strong>Jogar</strong><small>Entrar no Farol</small>`, "hub", "", "primary")}${s.run ? this.button(`${this.px("book")}<strong>Continuar expedição</strong>`, "continue") : ""}${this.button(`${this.px("gear")}<strong>Configurações</strong>`, "settings")}${this.button(`${this.px("echo")}<strong>Créditos</strong>`, "credits")}</nav><p class="menu-motto">Enquanto uma memória brilhar,<br>a noite não será eterna.</p></section><aside class="menu-character"><img src="assets/portrait-eira.png" alt="Eira, Tecelã da Última Luz"><div><b>EIRA</b><span>Tecelã da Última Luz</span><div class="menu-life"><i></i></div><small>${s.deaths} retornos ao Farol</small></div></aside><div class="menu-key-guide"><kbd>W A S D</kbd> Mover <kbd>ESPAÇO</kbd> Esquivar ${this.button("F1 · Controles", "controls")}</div><footer class="menu-footer"><span>EDIÇÃO 32 BITS</span><span>UMA ÚLTIMA LUZ PARA O AMANHÃ</span><span>JOGUE SEM INTERNET</span></footer>`;
+    const nav = this.overlay.querySelector(".main-nav")!;
+    nav.querySelector('[data-action="settings"]')!.insertAdjacentHTML("beforebegin", this.button(`${this.px("sun")}<strong>Nova campanha</strong>`, "campaignNew") + this.button(`${this.px("book")}<strong>Campanhas salvas</strong>`, "campaigns"));
+    if (!s.run && s.location) nav.querySelector('[data-action="hub"]')!.insertAdjacentHTML("afterend", this.button(`${this.px("book")}<strong>Continuar na vila</strong>`, "continue"));
+    if (s.run && s.location?.area === "hub") nav.querySelector('[data-action="continue"]')!.innerHTML = `${this.px("book")}<strong>Continuar na vila</strong>`;
+    this.overlay.querySelector(".menu-motto")!.insertAdjacentHTML("beforebegin", `<p class="active-campaign">${escape(this.app.store.activeCampaign.name)}</p>`);
   }
   modal(
     title: string,
@@ -158,6 +204,7 @@ export class UI {
     screen: Screen,
     wide = false,
   ): void {
+    this.app.voice.stop();
     this.screen = screen;
     this.overlay.className = "modal-backdrop";
     this.overlay.innerHTML = `<section class="panel ${wide ? "wide" : ""}" role="dialog" aria-modal="true" aria-label="${escape(title)}"><header class="panel-head"><div><div class="eyebrow">${eyebrow}</div><h2>${title}</h2></div>${screen === "death" || screen === "victory" ? "" : this.button("×", "back", "", "close-button")}</header>${content}</section>`;
@@ -180,6 +227,7 @@ export class UI {
     );
   }
   close(): void {
+    this.app.voice.stop();
     this.activeNpc = null;
     this.overlay.innerHTML = "";
     this.overlay.className = "";
@@ -197,8 +245,13 @@ export class UI {
     if (!world) return;
     const run = this.app.run,
       b = run ? BIOMES[run.nodes[run.current].biome] : null;
-    this.hudEl.innerHTML = `<header class="game-top"><div class="region">${this.px("sun", "mini-logo")}<div><div class="eyebrow">${world.isHub ? "UM LUGAR ENTRE OS INSTANTES" : b!.eyebrow}</div><h3>${world.isHub ? "Farol dos Ecos" : b!.name}</h3></div></div><div class="top-actions"><span class="currency">${this.px("echo")} <span id="echoes">${this.app.store.data.echoes}</span> <small>ECOS</small></span>${run ? '<span class="currency gold"><img class="px-icon" src="assets/icon-coin.png" alt="Óbolos"> <span id="coins">0</span></span>' : ""}${this.button(`${this.px("map")}<small>TAB</small>`, "map", "", "icon-button")}${this.button(`${this.px("pause")}<small>ESC</small>`, "pause", "", "icon-button")}</div></header><aside id="objective-panel" class="objective-panel"></aside><div id="boss-hud"></div><footer class="game-bottom"><div class="health-block"><img class="hud-portrait" src="assets/portrait-eira.png" alt=""><div class="health-content"><div class="player-id"><b>EIRA</b><small>TECELÃ DA ÚLTIMA LUZ</small><span id="health-number"></span></div><div class="health-track"><i id="health-fill"></i></div><div class="energy-track"><i id="energy-fill"></i></div><div class="weapon-name">${weaponName(this.app.store.data, run?.weapon ?? this.app.weapon, WEAPONS[run?.weapon ?? this.app.weapon].name)} <span>· ${WEAPONS[run?.weapon ?? this.app.weapon].subtitle}</span></div><div id="combo-status" class="combo-status"></div></div></div><div id="skillbar" class="skillbar"><div><kbd>ESPAÇO</kbd><b id="dash-state">⟡</b><small>ESQUIVA</small></div><div><kbd>M2</kbd><b id="special-state">✦</b><small>ESPECIAL</small></div><div><kbd>SHIFT</kbd><b id="alt-state">⌁</b><small>RUPTURA</small></div><div><kbd>Q</kbd><b id="ult-state">☼</b><small>AURORA</small></div></div><div id="boon-strip" class="boon-strip"></div></footer>${world.isHub ? `<aside class="hub-hint"><b>O Farol é um abrigo.</b> Aproxime-se dos moradores e pressione <kbd>E</kbd> para conversar. Use o portal para partir.</aside>` : ""}`;
+    this.hudEl.innerHTML = `<header class="game-top"><div class="region">${this.px("sun", "mini-logo")}<div><div class="eyebrow">${world.isHub ? "UM LUGAR ENTRE OS INSTANTES" : b!.eyebrow}</div><h3>${world.isHub ? "Farol dos Ecos" : b!.name}</h3></div></div><div class="top-actions"><span class="currency">${this.px("echo")} <span id="echoes">${this.app.store.data.echoes}</span> <small>ECOS</small></span>${run ? '<span class="currency gold"><img class="px-icon" src="assets/icon-coin.png" alt="Óbolos"> <span id="coins">0</span></span>' : ""}${this.button(`${this.px("map")}<small>TAB</small>`, "map", "", "icon-button")}${this.button(`${this.px("pause")}<small>ESC</small>`, "pause", "", "icon-button")}</div></header><aside id="objective-panel" class="objective-panel"></aside><div id="boss-hud"></div><footer class="game-bottom"><div class="health-block"><img class="hud-portrait" src="assets/portrait-eira.png" alt=""><div class="health-content"><div class="player-id"><b>EIRA</b><small>TECELÃ DA ÚLTIMA LUZ</small><span id="health-number"></span></div><div class="health-track"><i id="health-fill"></i></div><div class="energy-track"><i id="energy-fill"></i></div><div class="weapon-name">${weaponName(this.app.store.data, run?.weapon ?? this.app.weapon, WEAPONS[run?.weapon ?? this.app.weapon].name)} <span>· ${WEAPONS[run?.weapon ?? this.app.weapon].subtitle}</span></div><div id="combo-status" class="combo-status"></div></div></div><div class="weapon-switch-hud">${this.loadoutMarkup(true)}</div><div id="skillbar" class="skillbar"><div><kbd>ESPAÇO</kbd><b id="dash-state">⟡</b><small>ESQUIVA</small></div><div><kbd>M2</kbd><b id="special-state">✦</b><small>ESPECIAL</small></div><div><kbd>SHIFT</kbd><b id="alt-state">⌁</b><small>RUPTURA</small></div><div><kbd>Q</kbd><b id="ult-state">☼</b><small>AURORA</small></div></div><div id="boon-strip" class="boon-strip"></div></footer>${world.isHub ? `<aside class="hub-hint"><b>O Farol é um abrigo.</b> Siga as ruas até as casas e pressione <kbd>E</kbd> para conversar. <kbd>TAB</kbd> abre o mapa da vila. O portão leste leva à expedição.</aside>` : ""}`;
     this.hudEl.insertAdjacentHTML("beforeend", this.needsMarkup());
+    const context = document.createElement("div"); context.className = "stage-context";
+    const objective = document.getElementById("objective-panel")!; objective.before(context); context.append(objective);
+    if (run) context.insertAdjacentHTML("beforeend", '<aside id="phase-route" class="phase-route"></aside><aside id="gate-status" class="gate-status" aria-live="polite"></aside>');
+    this.hudEl.insertAdjacentHTML("beforeend", '<div id="save-status" class="save-status"></div>');
+    this.updateSaveStatus();
     if (run)
       this.hudEl.insertAdjacentHTML("beforeend", `<aside id="room-return" class="room-return" hidden><b>✓ Câmara restaurada</b><p>Você pode se abastecer e continuar esta expedição depois.</p>${this.button("Voltar ao Farol", "returnToHub")}</aside>`);
     this.updateHUD();
@@ -207,10 +260,21 @@ export class UI {
     const el = document.getElementById(id);
     if (el && el.textContent !== value) el.textContent = value;
   }
+  markup(el: HTMLElement, value: string): void {
+    if (this.markupCache.get(el) === value) return;
+    el.innerHTML = value; this.markupCache.set(el, value);
+  }
   updateHUD(): void {
     const w = this.app.world;
     if (!w || this.screen === "menu") return;
     const run = this.app.run;
+    if (!run && !w.isHub) return;
+    if (run && !w.isHub) {
+      const done = w.relays.filter((m) => m.done).length;
+      const phase = phaseState(run);
+      this.text("gate-status", phase.gateOpened ? "Portão aberto" : phase.keyFound ? "Chave da fase na mochila" : phase.keyRevealed ? "Chave revelada · recolha com E" : "Chave escondida · TAB mostra a pista");
+      this.text("phase-route", `${w.relays.length ? `Marcos: ${done}/${w.relays.length} · ` : ""}${w.navigationGoal().label} · ${w.stage.design.rule === "treasure" ? w.stageHint() + " · " : ""}TAB: mapa`);
+    }
     const retreat = document.getElementById("room-return");
     if (retreat) retreat.hidden = !run || !w.cleared || w.rewardPending;
     this.updateNeeds();
@@ -258,18 +322,26 @@ export class UI {
           : o.kind === "defend"
             ? `${Math.floor(o.progress)} / ${o.target}s · Núcleo ${Math.max(0, Math.ceil(o.integrity))}%`
             : `${Math.floor(o.progress)} / ${o.target}`;
-      op.innerHTML = `<div class="eyebrow">${w.cleared ? "✓ CÂMARA RESTAURADA" : ` ${run!.current % 9 >= 7 ? "DESVIO OPCIONAL" : `CÂMARA ${(run!.current % 9) + 1} / 7`} · ${kind === "boss" ? "VIGIA" : "OBJETIVO"}`}</div><h4>${o.definition.title}</h4><p>${w.cleared ? "Siga pelo portal ou volte ao Farol para se abastecer." : o.definition.instruction}</p><div class="objective-progress"><i style="width:${o.target ? Math.min(100, (o.progress / o.target) * 100) : 100}%"></i></div><small>${w.cleared ? "A passagem está aberta" : progress}</small><div class="secondary">◇ ${o.damageTaken === 0 ? "Sem sofrer dano" : "Uma cicatriz permanece"}<br>◇ ${Math.max(0, Math.ceil(90 - o.elapsed))}s para o desafio de tempo</div>`;
+      if (!op.firstElementChild) op.innerHTML = '<div id="objective-kind" class="eyebrow"></div><h4 id="objective-title"></h4><p id="objective-instruction"></p><div class="objective-progress"><i id="objective-fill"></i></div><small id="objective-value"></small><div class="secondary"><span id="objective-damage"></span><br><span id="objective-time"></span></div>';
+      this.text("objective-kind", w.cleared ? "✓ CÂMARA RESTAURADA" : `${run!.current % 9 >= 7 ? "DESVIO OPCIONAL" : `CÂMARA ${(run!.current % 9) + 1} / 7`} · ${kind === "boss" ? "VIGIA" : "OBJETIVO"}`);
+      this.text("objective-title", o.definition.title);
+      this.text("objective-instruction", w.cleared ? (phaseState(run!).keyFound ? "Leve a chave ao portão ou volte à vila para se abastecer." : "Encontre a chave escondida para abrir o portão.") : o.definition.instruction);
+      const fill = document.getElementById("objective-fill")!, width = `${o.target ? Math.min(100, (o.progress / o.target) * 100) : 100}%`;
+      if (fill.style.width !== width) fill.style.width = width;
+      this.text("objective-value", w.cleared ? (phaseState(run!).gateOpened ? "O portão está aberto" : "Portão trancado") : progress);
+      this.text("objective-damage", `◇ ${o.damageTaken === 0 ? "Sem sofrer dano" : "Uma cicatriz permanece"}`);
+      this.text("objective-time", `◇ ${Math.max(0, Math.ceil(90 - o.elapsed))}s para o desafio de tempo`);
     }
     const boss = w.enemies.find((e) => e.boss && !e.health.dead),
       bh = document.getElementById("boss-hud");
     if (bh) {
       if (boss) {
-        bh.innerHTML = `<div class="boss-bar"><span>VIGIA DO FRAGMENTO · FASE ${boss.phase}</span><h3>${BIOMES[run!.nodes[run!.current].biome].boss}</h3><div><i style="width:${(boss.health.hp / boss.health.max) * 100}%"></i></div></div>`;
-      } else bh.innerHTML = "";
+        this.markup(bh, `<div class="boss-bar"><span>VIGIA DO FRAGMENTO · FASE ${boss.phase}</span><h3>${BIOMES[run!.nodes[run!.current].biome].boss}</h3><div><i style="width:${(boss.health.hp / boss.health.max) * 100}%"></i></div></div>`);
+      } else this.markup(bh, "");
     }
     const strip = document.getElementById("boon-strip");
     if (strip && run) {
-      strip.innerHTML =
+      this.markup(strip,
         run.boons
           .slice(-8)
           .map((id) => {
@@ -278,7 +350,7 @@ export class UI {
               ? `<span title="${b.name}: ${b.description}" style="color:${SCHOOL_COLORS[b.school]}">◇</span>`
               : "";
           })
-          .join("") + `<small>${run.boons.length} JURAMENTOS</small>`;
+          .join("") + `<small>${run.boons.length} JURAMENTOS</small>`);
     }
   }
   comboName(): string {
@@ -338,7 +410,7 @@ export class UI {
         '[data-action="quickDrink"]',
       );
     if (eat) {
-      eat.textContent = `R · Comer (${s.provisions.ration + s.provisions.stew})`;
+      const label = `R · Comer (${s.provisions.ration + s.provisions.stew})`; if (eat.textContent !== label) eat.textContent = label;
       eat.disabled = !!consumableBlock(
         s,
         n,
@@ -346,7 +418,7 @@ export class UI {
       );
     }
     if (drink) {
-      drink.textContent = `T · Beber (${s.provisions.water + s.provisions.tea})`;
+      const label = `T · Beber (${s.provisions.water + s.provisions.tea})`; if (drink.textContent !== label) drink.textContent = label;
       drink.disabled = !!consumableBlock(
         s,
         n,
@@ -420,6 +492,25 @@ export class UI {
       3400,
     );
   }
+  lootNotice(loot: Loot): void {
+    const phase = this.app.run ? phaseState(this.app.run) : null;
+    if (!phase) return;
+    const feed = document.getElementById("loot-feed")!;
+    for (const item of LOOT_ITEMS) {
+      const amount = loot[item.id];
+      if (!amount) continue;
+      let row = document.getElementById(`loot-${item.id}`);
+      if (!row) { row = document.createElement("div"); row.id = `loot-${item.id}`; row.className = "loot-row"; feed.append(row); }
+      row.innerHTML = `${this.px(item.icon)}<span><b>+${amount} ${item.name}</b><small>Total na fase: ${phase.collected[item.id]}</small></span>`;
+      clearTimeout(this.lootTimers.get(item.id));
+      this.lootTimers.set(item.id, window.setTimeout(() => { row?.remove(); this.lootTimers.delete(item.id); }, 2700));
+    }
+  }
+  clearLoot(): void {
+    for (const timer of this.lootTimers.values()) clearTimeout(timer);
+    this.lootTimers.clear();
+    document.getElementById("loot-feed")?.replaceChildren();
+  }
   announcement(title: string, sub: string, duration = 2200): void {
     const el = document.getElementById("announcement")!;
     el.innerHTML = `<span>${escape(sub)}</span><strong>${escape(title)}</strong><i>◇</i>`;
@@ -434,7 +525,7 @@ export class UI {
     this.modal(
       "O que você levará para a noite?",
       "UMA NOVA EXPEDIÇÃO",
-      `<p>Sete câmaras separam cada fragmento do próximo. Escolha sua arma e uma semente para a jornada.</p><div class="weapon-options">${(Object.keys(WEAPONS) as WeaponId[]).map((id) => this.button(`<b>${this.px(id)}</b><strong>${WEAPONS[id].name}</strong><small>${this.app.store.data.unlocked.includes(id) ? (id === this.app.weapon ? "EQUIPADA" : "DISPONÍVEL") : "BLOQUEADA · OFICINA"}</small>`, "selectWeapon", id, this.app.weapon === id ? "selected" : "")).join("")}</div><label class="seed-label">SEMENTE DA EXPEDIÇÃO<input id="seed-input" maxlength="48" placeholder="Deixe o destino escolher" autocomplete="off"></label><p class="fine-print">A mesma semente recria as salas e os objetivos. Uma expedição anterior será substituída ao partir.</p><div class="panel-footer">${this.button("Voltar", "back")}${this.button("Atravessar o portal →", "start", "", "primary")}</div>`,
+      `<p>Sete câmaras separam cada fragmento do próximo. Escolha uma arma para cada espaço e uma semente. Pressione F para alternar durante a travessia.</p>${this.loadoutMarkup()}<div class="weapon-options">${(Object.keys(WEAPONS) as WeaponId[]).map((id) => this.button(`<b>${this.px(id)}</b><strong>${WEAPONS[id].name}</strong><small>${this.app.store.data.unlocked.includes(id) ? (id === this.app.weapon ? "EQUIPADA" : "DISPONÍVEL") : "BLOQUEADA · OFICINA"}</small>`, "selectWeapon", id, this.app.weapon === id ? "selected" : "")).join("")}</div><label class="seed-label">SEMENTE DA EXPEDIÇÃO<input id="seed-input" maxlength="48" placeholder="Deixe o destino escolher" autocomplete="off"></label><p class="fine-print">A mesma semente recria as salas e os objetivos. Uma expedição anterior será substituída ao partir.</p><div class="panel-footer">${this.button("Voltar", "back")}${this.button("Atravessar o portão →", "start", "", "primary")}</div>`,
       "expedition",
       true,
     );
@@ -455,7 +546,7 @@ export class UI {
     this.modal(
       "Metal que ainda se lembra",
       "OFICINA DE ORREN",
-      `<p>Forje seu equipamento, aprimore até +3 e combine uma infusão com seu caminho na árvore.</p>${this.resourceBar()}<nav class="progression-tabs" aria-label="Operação da oficina">${(
+      `<p>Forje até 13 armas e equipe uma de cada tipo. Aprimoramentos e árvores próprias exigem XP obtida ao derrotar inimigos com aquela arma.</p>${this.resourceBar()}<nav class="progression-tabs" aria-label="Operação da oficina">${(
         [
           ["forge", "Armas & receitas"],
           ["upgrade", "Aprimorar"],
@@ -472,7 +563,7 @@ export class UI {
         )
         .join(
           "",
-        )}</nav>${mode === "infuse" ? `<div class="infusion-options" aria-label="Infusão escolhida">${INFUSIONS.map((i) => this.button(`${this.px(i.icon)} ${i.name}`, "infusionChoice", i.id, this.infusionChoice === i.id ? "primary" : "")).join("")}</div><p class="forge-hint">${INFUSIONS.find((i) => i.id === this.infusionChoice)!.description} Cada arma aceita uma infusão. Substituir consome uma nova receita.</p>` : mode === "upgrade" ? '<p class="forge-hint">Cada nível concede +12% de dano e +3% de velocidade de ataque. Os três aprimoramentos são permanentes.</p>' : ""}<div class="cards weapons forge-cards">${(
+        )}</nav>${mode === "infuse" ? `<div class="infusion-options" aria-label="Infusão escolhida">${INFUSIONS.map((i) => this.button(`${this.px(i.icon)} ${i.name}`, "infusionChoice", i.id, this.infusionChoice === i.id ? "primary" : "")).join("")}</div><p class="forge-hint">${INFUSIONS.find((i) => i.id === this.infusionChoice)!.description} Cada arma aceita uma infusão. Substituir consome uma nova receita.</p>` : mode === "upgrade" ? '<p class="forge-hint">Cada nível concede +12% de dano e +3% de velocidade de ataque. Requer 60 / 180 / 360 XP com a própria arma. Os aprimoramentos são permanentes.</p>' : ""}<div class="cards weapons forge-cards">${(
         Object.keys(WEAPONS) as WeaponId[]
       )
         .map((id) => {
@@ -492,7 +583,7 @@ export class UI {
                   ? "Remover infusão"
                   : `Infundir ${INFUSIONS.find((i) => i.id === this.infusionChoice)!.name}`;
           const owned = mode === "forge" && !locked;
-          return `<article class="card forge-card ${this.app.weapon === id && !locked ? "selected" : ""}" data-weapon="${id}"><span class="equipment-status">${locked ? "RECEITA NÃO FORJADA" : this.app.weapon === id ? "EQUIPADA" : "FORJADA"} · ${level}/3</span><div class="weapon-glyph">${this.px(id)}</div><div class="eyebrow">${w.subtitle}</div><h3>${weaponName(s, id, w.name)}</h3><p>${w.description}</p><dl><dt>Dano base${mode === "upgrade" && level < 3 ? " → próximo" : ""}</dt><dd>${Math.round(w.damage * (1 + (stats.damage ?? 0)))}${mode === "upgrade" && level < 3 ? ` → ${Math.round(w.damage * (1 + (stats.damage ?? 0) + 0.12))}` : ""}</dd><dt>Cadência</dt><dd>${(w.duration / (1 + Math.min(0.5, stats.attackSpeed ?? 0))).toFixed(2)}s</dd><dt>Infusão</dt><dd>${infusion.name}</dd></dl>${owned ? this.button(this.app.weapon === id ? "Equipada" : "Equipar", "unlock", id, "primary", this.app.weapon === id ? "Arma já equipada" : "") : `${this.costMarkup(cost)}${reason ? `<p class="recipe-reason">${reason}</p>` : '<p class="recipe-reason ready">Receita disponível</p>'}${this.button(label, "craft", `${id}:${mode}:${this.infusionChoice}`, "primary", reason)}`}</article>`;
+          return `<article class="card forge-card ${this.app.weapon === id && !locked ? "selected" : ""}" data-weapon="${id}"><span class="equipment-status">${locked ? "RECEITA NÃO FORJADA" : this.app.weapon === id ? "EQUIPADA" : "FORJADA"} · ${level}/3</span><div class="weapon-glyph">${this.px(id)}</div><div class="eyebrow">${w.subtitle}</div><h3>${weaponName(s, id, w.name)}</h3><p>${w.description}</p><dl><dt>Dano base${mode === "upgrade" && level < 3 ? " → próximo" : ""}</dt><dd>${Math.round(w.damage * (1 + (stats.damage ?? 0)))}${mode === "upgrade" && level < 3 ? ` → ${Math.round(w.damage * (1 + (stats.damage ?? 0) + 0.12))}` : ""}</dd><dt>Cadência</dt><dd>${(w.duration / (1 + Math.min(0.5, stats.attackSpeed ?? 0))).toFixed(2)}s</dd><dt>Infusão</dt><dd>${infusion.name}</dd></dl>${this.button("Árvore de domínio", "mastery", id, "mastery-link") }<small class="weapon-xp">${s.weaponXP[id]} XP · ${w.slot === "melee" ? "CORPO A CORPO" : "DISTÂNCIA"}</small>${owned ? this.button(this.app.weapon === id ? "Equipada" : "Equipar", "unlock", id, "primary", this.app.weapon === id ? "Arma já equipada" : "") : `${this.costMarkup(cost)}${reason ? `<p class="recipe-reason">${reason}</p>` : '<p class="recipe-reason ready">Receita disponível</p>'}${this.button(label, "craft", `${id}:${mode}:${this.infusionChoice}`, "primary", reason)}`}</article>`;
         })
         .join(
           "",
@@ -501,6 +592,23 @@ export class UI {
       true,
     );
     this.overlay.querySelector(".panel")!.scrollTop = scroll;
+  }
+  loadoutMarkup(compact = false): string {
+    const s = this.app.store.data, run = this.app.run, loadout = run?.loadout ?? s.loadout, active = run?.weapon ?? this.app.weapon;
+    return `<div class="weapon-loadout ${compact ? "compact" : ""}" aria-label="Armas equipadas">${(["melee", "ranged"] as const).map(slot => { const id = loadout[slot]; return `<div class="loadout-slot ${active === id ? "active" : ""}" data-slot="${slot}">${this.px(id)}<span><small>${slot === "melee" ? "CORPO A CORPO" : "DISTÂNCIA"}</small><b>${WEAPONS[id].name}</b></span>${active === id ? '<em>EM USO</em>' : '<kbd>F</kbd>'}</div>`; }).join("")}</div>`;
+  }
+  mastery(id: WeaponId): void {
+    if (!this.hasService("forge")) return;
+    const s = this.app.store.data, w = WEAPONS[id], nodes = masteryTree(id);
+    const render = (n: typeof nodes[number]) => { const reason = masteryBlock(s, id, n.id), learned = s.weaponMastery[id].includes(n.id); return `<article class="mastery-node ${learned ? "learned" : ""}" data-mastery="${n.id}"><small>${n.branch} · ${n.xp} XP</small><h3>${n.name}</h3><p>${n.description}</p><span>${n.iron} Ferro de memória</span>${this.button(learned ? "Aprendida" : "Aprender", "learnMastery", `${id}:${n.id}`, "primary", reason)}${reason && !learned ? `<small class="skill-block">${reason}</small>` : ""}</article>`; };
+    this.modal(w.name, "ORREN · DOMÍNIO DA ARMA", `<div class="mastery-heading">${this.px(id)}<div><h3>${w.subtitle}</h3><p><b data-mastery-xp>${s.weaponXP[id]} XP</b> com esta arma · ${s.weaponMastery[id].length}/7 técnicas aprendidas</p><p>Ganhe XP derrotando inimigos com esta arma. A XP é permanente e não é gasta ao aprender. Materiais pagam o trabalho de Orren.</p></div></div>${this.resourceBar()}<div class="mastery-root">${render(nodes[0])}</div><div class="mastery-branches">${["Técnica", "Disciplina"].map(branch => `<section><h3>${branch}</h3>${nodes.filter(n => n.branch === branch).map(render).join('<span class="mastery-arrow" aria-hidden="true">↓</span>')}</section>`).join("")}</div><p>Forja +1: ${UPGRADE_XP[1]} XP · +2: ${UPGRADE_XP[2]} XP · +3: ${UPGRADE_XP[3]} XP. Cada arma mantém sua própria experiência e seus upgrades.</p><div class="panel-footer">${this.button("Voltar à oficina", "armory", "", "primary")}</div>`, "mastery", true);
+  }
+  weaponExperience(id: WeaponId, amount: number): void {
+    let el = document.getElementById("weapon-xp-notice");
+    if (!el) { el = document.createElement("aside"); el.id = "weapon-xp-notice"; el.setAttribute("aria-live", "polite"); this.root.append(el); }
+    el.innerHTML = `${this.px(id)}<span>+${amount} XP · ${WEAPONS[id].name}<small>Domínio da arma: ${this.app.store.data.weaponXP[id]} XP</small></span>`;
+    el.classList.add("visible"); window.clearTimeout(this.xpTimer);
+    this.xpTimer = window.setTimeout(() => el?.classList.remove("visible"), 2700);
   }
   resourceBar(): string {
     const s = this.app.store.data;
@@ -587,19 +695,22 @@ export class UI {
       true,
     );
   }
-  dialogue(who: string): void {
+  dialogue(who: string, topic = ""): void {
     const npc = hubNpc(who);
     if (!npc || !this.app.world.nearNpc(npc.id)) return;
     this.activeNpc = npc.id;
-    const d = dialogue(npc.name, this.app.store.data);
+    if (npc.id === "salvia") { this.app.store.data.recovering = false; this.app.store.write(); }
+    const d = dialogue(npc.name, this.app.store.data), branch = CONVERSATIONS[npc.id].find(t => t.id === topic);
+    if (branch) d.lines = branch.lines;
     let page = 0;
     const draw = () => {
       this.modal(
         d.speaker,
         npc.role,
-        `<div class="dialogue-content"><div class="portrait"><img src="assets/portrait-${npc.id}.png" alt="${npc.name}"></div><div><p class="dialogue-text">“${d.lines[page]}”</p><span class="dialogue-page">${page + 1} / ${d.lines.length}</span></div></div><div class="npc-service">${this.button(npc.action, "npcService", npc.id, "primary")}</div><div class="panel-footer">${this.button("Encerrar", "back")}${this.button(page < d.lines.length - 1 ? "Ouvir →" : "Até o próximo instante", "dialogueNext")}</div>`,
+        `<div class="dialogue-content" data-speaker="${npc.id}"><div class="portrait"><img src="assets/portrait-${npc.id}.png" alt="${npc.name}"></div><div><p class="dialogue-text">“${d.lines[page]}”</p><span class="dialogue-page">${page + 1} / ${d.lines.length}${branch ? ` · ${branch.label}` : ""}</span><div class="voice-controls">${this.button("Ouvir novamente", "voiceReplay")} ${this.button("Parar voz", "voiceStop")}<small id="voice-status" role="status">${CHARACTER_VOICES[npc.id].style} · português</small></div></div></div><div class="dialogue-topics">${CONVERSATIONS[npc.id].map(t => this.button(t.label, "dialogueTopic", t.id)).join("")}</div><div class="npc-service">${this.button(npc.action, "npcService", npc.id, "primary")}</div><div class="panel-footer">${this.button("Encerrar", "back")}${this.button(page < d.lines.length - 1 ? "Ouvir →" : "Até o próximo instante", "dialogueNext")}</div>`,
         "dialogue",
       );
+      this.currentLine = d.lines[page]; this.app.voice.say(npc.id, this.currentLine);
     };
     draw();
     const advance = () => {
@@ -618,7 +729,7 @@ export class UI {
       r = rng(`${run.seed}:boon:${run.current}`),
       available = BOONS.filter((b) => !run.boons.includes(b.id));
     if (!available.length) {
-      run.coins += 30;
+      this.app.world.collectLoot({ coins: 30 });
       this.app.world.rewardPending = false;
       this.app.saveCheckpoint();
       return;
@@ -650,6 +761,29 @@ export class UI {
     this.toast(`${b.name} acompanha sua jornada.`);
   }
   map(): void {
+    if (this.app.world.isHub) { this.villageMap(); return; }
+    if (!this.app.run) { this.toast("O mapa da fase desperta durante a expedição."); return; }
+    const w = this.app.world, run = this.app.run, layout = w.layout, phase = phaseState(run), goal = w.navigationGoal();
+    const size = 12, at = (p: {x: number; y: number}) => ({ x: p.x / TILE * size, y: p.y / TILE * size });
+    const known = new Set(phase.explored);
+    let floor = "";
+    for (let y = 0; y < layout.height; y++) for (let x = 0; x < layout.width; x++)
+      if (layout.cells[y][x]) floor += `<rect x="${x * size}" y="${y * size}" width="11" height="11" rx="1" fill="${known.has(y * layout.width + x) ? "#bca878" : "#48565a"}"/>`;
+    const point = (p: {x: number; y: number}, label: string, cls: string) => { const q = at(p); return `<g class="${cls}"><circle cx="${q.x}" cy="${q.y}" r="6"/><text x="${q.x}" y="${q.y + 3}">${label}</text></g>`; };
+    const path = navigationPath(layout, w.pos, goal.pos).map(p => { const q = at(p); return `${q.x},${q.y}`; }).join(" ");
+    const position = at(w.pos);
+    const icons = w.stage.challenge.hazards.map(p => point(p, "⚠", "map-hazard")).join("") + w.stage.entrances.map(p => point(p, "R", "map-reinforcement")).join("") + w.relays.map((m, i) => point(m.pos, m.done ? "✓" : String(i + 1), m.done ? "map-done" : "map-goal")).join("") + w.markers.map(m => point(m.pos, m.done ? "✓" : "!", m.done ? "map-done" : "map-quest")).join("") + w.props.flatMap((p, i) => p.data.kind === "chest" && p.image.visible ? [point(p.data, phase.claimed.includes(`prop:${i}`) ? "✓" : "B", "map-chest")] : []).join("");
+    this.modal(BIOMES[run.nodes[run.current].biome].name, "MAPA DA FASE · TAB", `<div class="map-direction"><b>${run.nodes[run.current].title} · ${w.stage.challenge.name}</b><span>Próximo destino: ${goal.label}</span></div><svg class="stage-map" role="img" aria-label="Mapa da fase com posição de Eira, caminho, objetivos, baús e saída" viewBox="0 0 ${layout.width * size} ${layout.height * size}">${floor}<polyline class="map-route-line" points="${path}"/>${icons}${point(layout.spawn, "E", "map-entry")}${point(layout.exit, phase.gateOpened ? "S" : "P", phase.gateOpened ? "map-done" : "map-exit")}${phase.keyRevealed && !phase.keyFound ? point(w.stage.keyHiding.pos, "C", "map-key") : ""}<g class="map-player"><circle cx="${position.x}" cy="${position.y}" r="7"/><text x="${position.x}" y="${position.y - 11}">EIRA · VOCÊ ESTÁ AQUI</text></g></svg><div class="map-legend"><span>● Eira</span><span>— Caminho até o objetivo</span><span>1–4 Marcos · segure E</span><span>! Objetivo da fase</span><span>B Baú</span><span>E Entrada · P Portão · R Reforços</span><span>C Chave revelada</span><span>⚠ Perigo cíclico</span><span>Claro: explorado · Escuro: não visitado</span></div><p class="key-clue">${phase.keyFound ? "⚿ Chave da fase guardada na mochila." : phase.keyRevealed ? "A chave foi revelada e aparece no mapa. Aproxime-se e pressione E." : `⚿ ${w.stage.keyHiding.hint}`}</p><p class="inventory-note"><b>${w.stage.challenge.name}:</b> ${w.stage.challenge.instruction}</p><p class="inventory-note">${phase.secretOpened ? "Passagem secreta descoberta e incluída no mapa." : "Procure paredes rachadas para revelar passagens que ainda não aparecem no mapa."}</p><div class="panel-footer">${this.button("Rota da região", "campaignMap")}${this.button("Voltar à fase", "back", "", "primary")}</div>`, "map", true);
+  }
+  villageMap(): void {
+    const w = this.app.world, village = w.layout as VillageLayout, size = 12, roads = new Set(village.paths);
+    let floor = "";
+    for (let y = 0; y < village.height; y++) for (let x = 0; x < village.width; x++) if (village.cells[y][x]) floor += `<rect x="${x * size}" y="${y * size}" width="11" height="11" fill="${roads.has(y * village.width + x) ? "#c7b88d" : "#426750"}"/>`;
+    const dots = village.houses.map(h => { const n = HUB_NPCS.find(n => n.id === h.npc)!; return `<g class="village-map-house" data-house-map="${h.npc}"><rect x="${h.center.x / TILE * size - 22}" y="${h.center.y / TILE * size - 18}" width="44" height="36" rx="3"/><text x="${h.center.x / TILE * size}" y="${h.center.y / TILE * size + 4}">${n.name}</text></g>`; }).join("");
+    const p = w.pos;
+    this.modal("Vila do Farol dos Ecos", "MAPA DA VILA · TAB", `<p>Seis casas ligadas pela praça e pelas ruas. Escolha um destino para caminhar até ele; use WASD para interromper e E para conversar ao chegar.</p><svg class="stage-map village-map" viewBox="0 0 ${village.width * size} ${village.height * size}" role="img" aria-label="Mapa da vila com casas, ruas, portão e posição de Eira">${floor}${dots}<g class="map-player"><circle cx="${p.x / TILE * size}" cy="${p.y / TILE * size}" r="7"/><text x="${p.x / TILE * size}" y="${p.y / TILE * size - 11}">EIRA</text></g><text class="village-gate-map" x="${village.exit.x / TILE * size}" y="${village.exit.y / TILE * size}">PORTÃO</text></svg><div class="village-directory">${village.houses.map(h => { const n = HUB_NPCS.find(n => n.id === h.npc)!; return `<article data-village-house="${n.id}"><b>${n.name} · ${h.name}</b><p>${n.action}</p>${this.button(`Ir até ${n.name}`, "villageGuide", n.id)}</article>`; }).join("")}</div><div class="panel-footer">${this.button("Ir ao portão da vila", "villageGate", "", "primary")}</div>`, "map", true);
+  }
+  campaignMap(): void {
     if (!this.app.run) {
       this.toast("O mapa desperta durante uma expedição.");
       return;
@@ -708,20 +842,36 @@ export class UI {
       "event",
     );
   }
+  updateSaveStatus(): void {
+    const el = document.getElementById("save-status"); if (!el) return;
+    const store = this.app.store;
+    el.textContent = store.available ? `Salvo · ${store.savedAt ? new Date(store.savedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : store.activeCampaign.name}` : "Save indisponível · exporte um backup";
+    el.dataset.failed = String(!store.available);
+  }
+  campaigns(): void {
+    if (!["campaigns", "newCampaign", "campaignDelete"].includes(this.screen)) this.managementReturn = this.screen;
+    const store = this.app.store;
+    this.modal("Suas campanhas", "MEMÓRIAS GUARDADAS", `<p>Cada campanha tem seu próprio progresso, inventário e expedição. Seu save anterior está preservado em <b>Campanha 1</b>.</p><div class="campaign-grid">${store.campaigns.map(c => `<article class="campaign-card ${c.id === store.activeId ? "active" : ""}" data-campaign="${c.id}"><div class="eyebrow">${c.id === store.activeId ? "CAMPANHA ATIVA" : "CAMPANHA SALVA"}</div><h3>${escape(c.name)}</h3><p>${c.data.location?.area === "hub" || !c.data.run ? "Vila do Farol dos Ecos" : BIOMES[c.data.run.nodes[c.data.run.current].biome].name + " · câmara " + (c.data.run.current % 9 + 1)}</p><small>${c.data.echoes} Ecos · ${c.data.deaths} retornos · ${c.updatedAt ? new Date(c.updatedAt).toLocaleString("pt-BR") : "Ainda não iniciada"}</small><div class="campaign-actions">${this.button("Continuar campanha", "loadCampaign", c.id, "primary")}${c.id !== store.activeId ? this.button("Excluir", "campaignDelete", c.id) : ""}</div></article>`).join("")}</div><div class="panel-footer">${this.button("Nova campanha", "campaignNew", "", "primary", store.campaigns.length >= 6 ? "Os seis espaços estão ocupados" : "")}${this.button("Exportar backup da ativa", "exportCampaign")}<label class="backup-import">Importar backup<input type="file" accept="application/json,.json" data-campaign-import aria-label="Importar backup de campanha"></label></div><p class="fine-print">Saves locais neste navegador. Exporte um backup para guardar uma cópia em arquivo ou levar a outro computador.</p>`, "campaigns", true);
+  }
+  newCampaign(): void {
+    if (!["campaigns", "newCampaign"].includes(this.screen)) this.managementReturn = this.screen;
+    this.modal("Uma nova aurora", "NOVA CAMPANHA", `<p>Comece outra história com inventário e progressão novos. As campanhas anteriores continuam disponíveis.</p><label class="seed-label">NOME DA CAMPANHA<input id="campaign-name" maxlength="40" placeholder="Ex.: A travessia de Eira" value="Campanha ${this.app.store.campaigns.length + 1}" autocomplete="off"></label><div class="panel-footer">${this.button("Voltar", "back")}${this.button("Criar campanha", "createCampaign", "", "primary")}</div>`, "newCampaign");
+    window.setTimeout(() => document.getElementById("campaign-name")?.focus(), 20);
+  }
   pause(): void {
     if (this.screen !== "play") return;
     this.app.saveCheckpoint();
     this.modal(
       "Entre dois instantes",
       "TRAVESSIA PAUSADA",
-      `<nav class="pause-nav">${this.button("Retomar a jornada →", "back", "", "primary")}${this.button("Inventário · comidas, roupas e recursos", "inventory")}${this.button("Controles", "controls")}${this.button("Configurações", "settings")}${this.button("Menu principal", "menu")}</nav><p class="fine-print">O progresso é salvo na entrada de cada câmara. Ao continuar, a câmara atual recomeça com os recursos salvos. Dados guardados neste navegador.</p>`,
+      `<nav class="pause-nav">${this.button("Retomar a jornada →", "back", "", "primary")}${this.button("Salvar agora", "saveNow")}${this.button("Inventário · comidas, roupas e recursos", "inventory")}${this.button("Campanhas e backups", "campaigns")}${this.button("Controles", "controls")}${this.button("Configurações", "settings")}${this.button("Salvar e sair para o menu", "menu")}</nav><p class="fine-print">Sua posição, vida, inimigos e objetivos são salvos automaticamente a cada cinco segundos e ao sair. ${this.app.store.available ? "Você pode continuar deste ponto." : "O navegador bloqueou o armazenamento. Exporte um backup antes de fechar."}</p>`,
       "pause",
     );
     if (this.app.run && this.app.world.cleared && !this.app.world.rewardPending)
       this.overlay.querySelector(".pause-nav")!.insertAdjacentHTML("beforeend", this.button("Voltar ao Farol", "returnToHub"));
   }
   settings(): void {
-    this.previous = this.screen === "menu" ? "menu" : "play";
+    this.previous = this.screen === "settings" ? this.previous : this.screen;
     const s = this.app.store.data.settings;
     this.modal(
       "Ajuste a sua aurora",
@@ -729,6 +879,7 @@ export class UI {
       `<div class="settings">${[
         ["music", "Música ambiente", s.music],
         ["sfx", "Efeitos sonoros", s.sfx],
+        ["voice", "Vozes dos personagens", s.voice],
         ["shake", "Impacto da câmera", s.shake],
       ]
         .map(
@@ -740,8 +891,10 @@ export class UI {
         )}<div class="quality"><span>QUALIDADE VISUAL</span><div>${(["low", "medium", "high"] as const).map((q, i) => this.button(["Baixa", "Média", "Alta"][i], "quality", q, s.quality === q ? "selected" : "")).join("")}</div></div><p class="fine-print">Partículas e névoa se adaptam à qualidade. Aplicada ao entrar na próxima câmara. Renderização: ${this.app.game?.renderer.type === 2 ? "WebGL" : "Canvas (fallback)"}.<br>O áudio começa após sua primeira interação.</p></div><div class="panel-footer">${this.button("Salvar e voltar", "settingsBack", "", "primary")}</div>`,
       "settings",
     );
+    this.overlay.querySelector(".settings")!.insertAdjacentHTML("beforeend", `<label class="voice-auto"><input type="checkbox" data-voice-auto ${s.voiceAuto ? "checked" : ""}> Ouvir diálogos automaticamente</label><p class="fine-print">Falas em português incluídas no jogo, com ritmo e timbre próprios por personagem. Vozes sintetizadas, com legendas sempre ativas. Falas variáveis usam a voz em português do sistema quando disponível.</p>`);
   }
   controls(): void {
+    if (!["menu", "play", "pause"].includes(this.screen)) { this.toast("Feche a tela atual para consultar os controles."); return; }
     const prev = this.screen;
     this.modal(
       "A linguagem da centelha",
@@ -752,6 +905,7 @@ export class UI {
         ["M1", "Combo de 6 golpes (cliques encadeados)"],
         ["SEGURAR M1", "Ataque carregado"],
         ["M2", "Especial da arma"],
+        ["F", "Alternar corpo a corpo / distância"],
         ["ESPAÇO", "Esquiva com invulnerabilidade"],
         ["SHIFT", "Ruptura · onda que desacelera"],
         ["Q", "Aurora · requer 100% de energia"],
@@ -767,10 +921,10 @@ export class UI {
         )
         .join(
           "",
-        )}</div><p class="fine-print">Esquivas cancelam a recuperação de um golpe. Círculos alaranjados antecipam ataques. Objetivos e inimigos devem ser resolvidos para abrir o portal.</p>`,
+        )}</div><p class="fine-print">Esquivas cancelam a recuperação de um golpe. Círculos alaranjados antecipam ataques. Restaure a fase e encontre a chave escondida para abrir o portão.</p>`,
       "controls",
     );
-    this.previous = prev === "menu" ? "menu" : "play";
+    this.previous = prev;
   }
   toggleInventory(): void {
     if (this.screen === "inventory") this.close();
@@ -802,9 +956,9 @@ export class UI {
     } else {
       const active = run?.weapon ?? this.app.weapon;
       const expedition = run ?? s.run;
-      content = `<p class="inventory-note">${SKILLS.filter((node) => skillRank(s, node.id) > 0).length} habilidades permanentes aprendidas. Converse com Orren para forjar, aprimorar ou trocar a arma.</p><div class="inventory-grid">${(Object.keys(WEAPONS) as WeaponId[]).map((id) => `<article class="inventory-item ${id === active ? "equipped" : ""}" data-owned-weapon="${id}"><h3>${this.px(id)} ${weaponName(s, id, WEAPONS[id].name)}</h3><strong>${s.unlocked.includes(id) ? (id === active ? "Em uso · Quantidade: 1" : "Quantidade: 1") : "Quantidade: 0 · Ainda não forjada"}</strong><p>${WEAPONS[id].description}</p><small>Forja +${s.weaponLevels[id]} · Infusão: ${INFUSIONS.find((i) => i.id === s.infusions[id])!.name}</small></article>`).join("")}</div><h3 class="inventory-section">Juramentos ${run ? "da expedição" : expedition ? "da expedição salva" : ""}</h3><div class="inventory-list">${expedition?.boons.length ? expedition.boons.map((id) => { const b = BOONS.find((b) => b.id === id)!; return `<article style="border-color:${SCHOOL_COLORS[b.school]}"><b>${b.name}</b><small>${b.school}</small><p>${b.description}</p></article>`; }).join("") : "<p>Nenhum Juramento guardado nesta expedição.</p>"}</div>`;
+      content = `<p class="inventory-note">${SKILLS.filter((node) => skillRank(s, node.id) > 0).length} habilidades permanentes aprendidas. Converse com Orren para forjar e aprimorar. Equipe uma arma de cada tipo aqui e alterne entre elas com F.</p>${this.loadoutMarkup()}<div class="inventory-grid">${(Object.keys(WEAPONS) as WeaponId[]).map((id) => `<article class="inventory-item ${id === active ? "equipped" : ""}" data-owned-weapon="${id}"><h3>${this.px(id)} ${weaponName(s, id, WEAPONS[id].name)}</h3><strong>${s.unlocked.includes(id) ? (id === active ? "Em uso · Quantidade: 1" : "Quantidade: 1") : "Quantidade: 0 · Ainda não forjada"}</strong><p>${WEAPONS[id].description}</p><small>${s.weaponXP[id]} XP · ${WEAPONS[id].slot === "melee" ? "Corpo a corpo" : "Distância"} · ${s.weaponMastery[id].length}/7 técnicas</small>${s.unlocked.includes(id) ? this.button(id === active ? "Em uso" : "Equipar neste espaço", "equipWeapon", id, "primary", id === active ? "Arma já em uso" : "") : ""}<small>Forja +${s.weaponLevels[id]} · Infusão: ${INFUSIONS.find((i) => i.id === s.infusions[id])!.name}</small></article>`).join("")}</div><h3 class="inventory-section">Juramentos ${run ? "da expedição" : expedition ? "da expedição salva" : ""}</h3><div class="inventory-list">${expedition?.boons.length ? expedition.boons.map((id) => { const b = BOONS.find((b) => b.id === id)!; return `<article style="border-color:${SCHOOL_COLORS[b.school]}"><b>${b.name}</b><small>${b.school}</small><p>${b.description}</p></article>`; }).join("") : "<p>Nenhum Juramento guardado nesta expedição.</p>"}</div>`;
     }
-    this.modal("Inventário de Eira", "MOCHILA & EQUIPAMENTOS", `<div class="inventory-wallet"><span>${this.px("echo")} <b data-wallet="echoes">${s.echoes}</b> Ecos</span><span>${this.px("coin")} <b data-wallet="coins">${run?.coins ?? s.run?.coins ?? 0}</b> Óbolos${!run && s.run ? " da expedição salva" : ""}</span><span>${this.px("coat")} ${outfit.name}</span></div><nav class="inventory-tabs" aria-label="Categorias do inventário">${tabs.map(([id, label]) => this.button(label, "inventoryTab", id, id === tab ? "primary" : "").replace("<button ", `<button aria-pressed="${id === tab}" `)).join("")}</nav><section class="inventory-content" aria-label="${tabs.find(([id]) => id === tab)![1]}">${content}</section><p class="inventory-note inventory-footer">I ou Esc para fechar · Crie itens conversando com os moradores do Farol.</p>`, "inventory", true);
+    this.modal("Inventário de Eira", "MOCHILA & EQUIPAMENTOS", `${(run ?? s.run) ? `<div class="inventory-key" data-key-stock><b>⚿ Chave da fase ${(run ?? s.run)!.current % 9 + 1}</b><span>${phaseState((run ?? s.run)!).keyFound ? "Quantidade: 1 · Abre o portão desta fase" : "Quantidade: 0 · Procure o nicho escondido"}</span></div>` : ""}<div class="inventory-wallet"><span>${this.px("echo")} <b data-wallet="echoes">${s.echoes}</b> Ecos</span><span>${this.px("coin")} <b data-wallet="coins">${run?.coins ?? s.run?.coins ?? 0}</b> Óbolos${!run && s.run ? " da expedição salva" : ""}</span><span>${this.px("coat")} ${outfit.name}</span></div><nav class="inventory-tabs" aria-label="Categorias do inventário">${tabs.map(([id, label]) => this.button(label, "inventoryTab", id, id === tab ? "primary" : "").replace("<button ", `<button aria-pressed="${id === tab}" `)).join("")}</nav><section class="inventory-content" aria-label="${tabs.find(([id]) => id === tab)![1]}">${content}</section><p class="inventory-note inventory-footer">I ou Esc para fechar · Crie itens conversando com os moradores do Farol.</p>`, "inventory", true);
     this.overlay.querySelector(".panel")!.scrollTop = scroll;
     if (focus?.action && focus?.value)
       window.setTimeout(() => this.overlay.querySelector<HTMLButtonElement>(`[data-action="${focus.action}"][data-value="${focus.value}"]`)?.focus({ preventScroll: true }), 20);
@@ -834,6 +988,8 @@ export class UI {
       `<div class="end-sigil">◈</div><p class="dialogue-text">“Morrer não é esquecer. Ainda não.”</p><div class="stats"><div><b>${run.visited.length}</b><span>CÂMARAS</span></div><div><b>${run.kills}</b><span>ECOS LIBERTADOS</span></div><div><b>+${Math.max(4, Math.floor(run.kills / 2) + run.visited.length * 3)}</b><span>ECOS GUARDADOS</span></div></div><p>Armas, talentos e memórias permanecem. Óbolos e Juramentos ficam com a noite.</p><div class="panel-footer">${this.button("Ressurgir no Farol →", "hub", "", "primary")}</div>`,
       "death",
     );
+    const loss = this.app.store.data.lastLoss ?? {};
+    this.overlay.querySelector('.panel-footer')!.insertAdjacentHTML('beforebegin', `<div class="death-loss"><b>30% dos recursos em risco nesta fase foram perdidos.</b><div>${LOOT_ITEMS.filter(i => loss[i.id]).map(i => `<span>−${loss[i.id]} ${i.name}</span>`).join('') || '<span>Nenhum recurso novo estava em risco.</span>'}</div><p>O estoque anterior e os recursos guardados ao voltar ao Farol permanecem. Você retorna ao Refúgio da Centelha, junto de Sálvia, para investir em upgrades.</p></div>`);
   }
   victory(choice: string, run: Run): void {
     this.modal(
@@ -849,7 +1005,7 @@ export class UI {
     );
   }
   credits(): void {
-    this.previous = this.screen === "menu" ? "menu" : "play";
+    this.previous = this.screen;
     this.modal(
       "Véspera",
       "AS ENGRENAGENS DA ÚLTIMA AURORA",
@@ -867,11 +1023,18 @@ export class UI {
     else this.back();
   }
   back(): void {
+    if (["campaigns", "newCampaign", "campaignDelete"].includes(this.screen)) {
+      if (this.screen !== "campaigns") { this.campaigns(); return; }
+      if (this.managementReturn === "menu") this.menu(); else { this.close(); this.pause(); }
+      return;
+    }
+    if (["settings", "controls", "credits"].includes(this.screen) && this.previous === "pause") { this.close(); this.pause(); return; }
     if (
       ["settings", "controls", "credits"].includes(this.screen) &&
       this.previous === "menu"
     )
       this.menu();
+    else if (this.screen === "mastery") this.armory();
     else if (this.screen === "rewards")
       this.toast("Escolha uma promessa ou guarde os óbolos.");
     else if (this.screen === "death" || this.screen === "victory") return;
@@ -908,8 +1071,19 @@ export class UI {
         this.provisions();
         break;
       case "continue":
-        app.continueRun();
+        if (this.screen === "menu") app.resumeCampaign(); else app.continueRun();
         break;
+      case "campaigns": this.campaigns(); break;
+      case "campaignNew": this.newCampaign(); break;
+      case "createCampaign": app.createCampaign((document.getElementById("campaign-name") as HTMLInputElement)?.value ?? "Nova campanha"); break;
+      case "loadCampaign": void app.loadCampaign(value); break;
+      case "exportCampaign": app.exportCampaign(); break;
+      case "campaignDelete": {
+        const c = app.store.campaigns.find(c => c.id === value && c.id !== app.store.activeId); if (!c) break;
+        this.modal("Excluir campanha", "ESTA AÇÃO REMOVE O SAVE LOCAL", `<p>Excluir <b>${escape(c.name)}</b>? A campanha ativa será preservada. Exporte um backup antes se quiser guardar uma cópia.</p><div class="panel-footer">${this.button("Cancelar", "back")}${this.button("Excluir esta campanha", "deleteCampaign", value)}</div>`, "campaignDelete"); break;
+      }
+      case "deleteCampaign": app.store.deleteCampaign(value); this.campaigns(); break;
+      case "saveNow": app.saveCheckpoint(); this.toast(app.store.available ? "Partida salva. Você pode retomar deste ponto." : "Não foi possível gravar. Exporte um backup em Campanhas."); break;
       case "menu":
         app.saveCheckpoint();
         this.menu();
@@ -949,18 +1123,17 @@ export class UI {
         app.unlock(value as WeaponId);
         break;
       case "selectWeapon":
-        if (app.store.data.unlocked.includes(value as WeaponId)) {
-          app.weapon = value as WeaponId;
-          app.store.data.equipped = app.weapon;
-          app.store.write();
-          const input = (
-            document.getElementById("seed-input") as HTMLInputElement
-          ).value;
-          this.expedition();
-          (document.getElementById("seed-input") as HTMLInputElement).value =
-            input;
-        } else this.toast("Orren pode forjar esta arma na oficina.");
+      case "equipWeapon":
+        if (isWeapon(value)) void app.equip(value);
         break;
+      case "mastery":
+        if (isWeapon(value)) this.mastery(value);
+        break;
+      case "learnMastery": {
+        const [weapon, node] = value.split(":");
+        if (isWeapon(weapon)) app.mastery(weapon, node);
+        break;
+      }
       case "talents":
         this.talents();
         break;
@@ -1006,8 +1179,18 @@ export class UI {
       case "credits":
         this.credits();
         break;
+      case "villageGate":
+        if (app.world.isHub) { this.close(); app.world.guideToVillageGate(); }
+        break;
+      case "villageGuide": {
+        const n = hubNpc(value); if (!n || !app.world.isHub) break;
+        this.close(); app.world.guideToNpc(n.id); break;
+      }
       case "map":
         this.map();
+        break;
+      case "campaignMap":
+        this.campaignMap();
         break;
       case "inventory":
         this.inventory();
@@ -1019,11 +1202,14 @@ export class UI {
       case "dialogueNext":
         this.dialogueNext();
         break;
+      case "dialogueTopic": if (this.activeNpc) this.dialogue(this.activeNpc, value); break;
+      case "voiceReplay": if (this.activeNpc) app.voice.say(this.activeNpc, this.currentLine, true); break;
+      case "voiceStop": app.voice.stop(); break;
       case "boon":
         this.acceptBoon(value);
         break;
       case "skipReward":
-        if (app.run) app.run.coins += 15;
+        if (app.run) app.world.collectLoot({ coins: 15 });
         app.world.rewardPending = false;
         app.saveCheckpoint();
         this.close();
@@ -1040,7 +1226,7 @@ export class UI {
         }
         run.coins -= cost;
         if (value === "heal") app.world.health.heal(45);
-        if (value === "echoes") app.store.data.echoes += 8;
+        if (value === "echoes") app.world.collectLoot({ echoes: 8 });
         app.saveCheckpoint();
         if (value === "boon") this.rewards();
         else this.shop();
@@ -1048,7 +1234,7 @@ export class UI {
       }
       case "eventChoice":
         if (value === "preserve") {
-          app.store.data.echoes += 8;
+          app.world.collectLoot({ echoes: 8 });
           app.remember("first");
           this.close();
         } else if (app.world.health.hp > 20) {
